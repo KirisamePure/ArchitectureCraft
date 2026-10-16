@@ -1,149 +1,146 @@
-// ------------------------------------------------------
-//
-// ArchitectureCraft - Main
-//
-// ------------------------------------------------------
-
 package gcewing.architecture;
 
-import java.io.File;
+import gcewing.architecture.shape.Shape;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.*;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.network.Packet;
-import net.minecraft.server.management.PlayerManager;
-import net.minecraft.server.management.ServerConfigurationManager;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.world.WorldServer;
+public final class ArchitectureCraft implements ModInitializer {
+  public static final String MOD_ID = "architecturecraft";
 
-import cpw.mods.fml.common.FMLCommonHandler;
-import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.Mod;
-import cpw.mods.fml.common.event.FMLInitializationEvent;
-import cpw.mods.fml.common.event.FMLInterModComms;
-import cpw.mods.fml.common.event.FMLPostInitializationEvent;
-import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import cpw.mods.fml.common.network.NetworkRegistry;
-import gcewing.architecture.client.render.model.IArchitectureModel;
-import gcewing.architecture.client.render.model.ObjJsonModel;
-import gcewing.architecture.common.config.ArchitectConfiguration;
-import gcewing.architecture.common.network.DataChannel;
-import gcewing.architecture.compat.PosteaCompat;
+  public static ResourceLocation id(String path) {
+    return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+  }
 
-@Mod(
-        modid = ArchitectureCraft.MOD_ID,
-        name = ArchitectureCraft.MOD_NAME,
-        version = ArchitectureCraft.VERSION,
-        acceptedMinecraftVersions = "[1.7.10]",
-        dependencies = "after:gregtech_nh@[5.09.52.596,)")
-public class ArchitectureCraft {
+  public static final DataComponentType<ShapeData> SHAPE_DATA =
+      Registry.register(
+          BuiltInRegistries.DATA_COMPONENT_TYPE,
+          id("shape"),
+          DataComponentType.<ShapeData>builder()
+              .persistent(ShapeData.CODEC)
+              .networkSynchronized(ByteBufCodecs.fromCodecWithRegistries(ShapeData.CODEC))
+              .build());
+  public static final ShapeBlock SHAPE =
+      registerBlock(
+          "shape",
+          new ShapeBlock(
+              blockProperties("shape")
+                  .strength(2.0F)
+                  .noOcclusion()
+                  .lightLevel(s -> s.getValue(ShapeBlock.GLOWING) ? 15 : 0)));
+  public static final SawbenchBlock SAWBENCH =
+      registerBlock(
+          "sawbench", new SawbenchBlock(blockProperties("sawbench").strength(2.0F).noOcclusion()));
+  public static final Item SAWBLADE =
+      registerItem("sawblade", new Item(itemProperties("sawblade")));
+  public static final Item LARGE_PULLEY =
+      registerItem("large_pulley", new Item(itemProperties("large_pulley")));
+  public static final Item CHISEL =
+      registerItem(
+          "chisel",
+          new ArchitectTool(itemProperties("chisel").stacksTo(1), ArchitectTool.Kind.CHISEL));
+  public static final Item HAMMER =
+      registerItem(
+          "hammer",
+          new ArchitectTool(itemProperties("hammer").stacksTo(1), ArchitectTool.Kind.HAMMER));
+  public static final Item GLOWBRUSH =
+      registerItem(
+          "glowbrush",
+          new ArchitectTool(itemProperties("glowbrush").stacksTo(1), ArchitectTool.Kind.GLOWBRUSH));
+  public static final Item CLADDING =
+      registerItem("cladding", new Item(itemProperties("cladding")));
+  public static final BlockEntityType<ShapeBlockEntity> SHAPE_ENTITY =
+      Registry.register(
+          BuiltInRegistries.BLOCK_ENTITY_TYPE,
+          id("shape"),
+          FabricBlockEntityTypeBuilder.create(ShapeBlockEntity::new, SHAPE).build());
+  public static final BlockEntityType<SawbenchBlockEntity> SAWBENCH_ENTITY =
+      Registry.register(
+          BuiltInRegistries.BLOCK_ENTITY_TYPE,
+          id("sawbench"),
+          FabricBlockEntityTypeBuilder.create(SawbenchBlockEntity::new, SAWBENCH).build());
+  public static final MenuType<SawbenchMenu> SAWBENCH_MENU =
+      Registry.register(
+          BuiltInRegistries.MENU,
+          id("sawbench"),
+          new MenuType<>(SawbenchMenu::new, FeatureFlags.VANILLA_SET));
 
-    public static final String MOD_NAME = "ArchitectureCraft";
-    public static final String MOD_ID = "ArchitectureCraft";
-    public static final String VERSION = Tags.VERSION;
-    public static final String ASSET_KEY = MOD_ID.toLowerCase();
-    public static final String REGISTRY_PREFIX = MOD_ID.toLowerCase();
+  private static BlockBehaviour.Properties blockProperties(String name) {
+    return BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id(name)));
+  }
 
-    private File cfgFile;
-    public ArchitectConfiguration config;
-    public static final ArchitectureContent content = new ArchitectureContent();
-    public static ArchitectureCraftClient client;
+  private static Item.Properties itemProperties(String name) {
+    return new Item.Properties().setId(ResourceKey.create(Registries.ITEM, id(name)));
+  }
 
-    @Mod.Instance(MOD_ID)
-    public static ArchitectureCraft mod;
+  private static <T extends Block> T registerBlock(String name, T block) {
+    Registry.register(BuiltInRegistries.BLOCK, id(name), block);
+    registerItem(
+        name,
+        name.equals("shape")
+            ? new ShapeItem(block, itemProperties(name).useBlockDescriptionPrefix())
+            : new BlockItem(block, itemProperties(name).useBlockDescriptionPrefix()));
+    return block;
+  }
 
-    public static DataChannel channel;
+  private static <T extends Item> T registerItem(String name, T item) {
+    return Registry.register(BuiltInRegistries.ITEM, id(name), item);
+  }
 
-    public static boolean posteaLoaded = false;
+  @Override
+  public void onInitialize() {
+    Registry.register(
+        BuiltInRegistries.CREATIVE_MODE_TAB,
+        id("architecturecraft"),
+        FabricItemGroup.builder()
+            .title(Component.literal("ArchitectureCraft"))
+            .icon(() -> new ItemStack(SAWBENCH))
+            .displayItems(
+                (parameters, output) -> {
+                  output.accept(SAWBENCH);
+                  output.accept(SAWBLADE);
+                  output.accept(LARGE_PULLEY);
+                  output.accept(CHISEL);
+                  output.accept(HAMMER);
+                  output.accept(GLOWBRUSH);
+                  for (Shape shape : Shape.values())
+                    output.accept(
+                        new ShapeData(
+                                shape.id,
+                                Blocks.OAK_PLANKS.defaultBlockState(),
+                                java.util.Optional.empty(),
+                                0,
+                                shape.offset ? 6 : 0)
+                            .stack(1));
+                })
+            .build());
+  }
 
-    public ArchitectureCraft() {
-        super();
-        channel = new DataChannel(MOD_ID);
-    }
-
-    @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent e) {
-        cfgFile = e.getSuggestedConfigurationFile();
-        loadConfig();
-        configure();
-        content.preInit(e);
-        if (e.getSide().isClient()) {
-            client = initClient();
-        }
-        if (client != null) client.preInit(e);
-
-    }
-
-    @Mod.EventHandler
-    public void init(FMLInitializationEvent e) {
-        if (client != null) client.init(e);
-        FMLInterModComms
-                .sendMessage("Waila", "register", "gcewing.architecture.compat.integration.WailaIntegration.register");
-    }
-
-    @Mod.EventHandler
-    public void postInit(FMLPostInitializationEvent e) {
-        content.postInit(e);
-        if (client != null) client.postInit(e);
-        saveConfig();
-        NetworkRegistry.INSTANCE.registerGuiHandler(this, new ArchitectureGuiHandler());
-        posteaLoaded = Loader.isModLoaded("postea");
-        if (posteaLoaded) {
-            PosteaCompat.registerTransformers();
-        }
-    }
-
-    public ArchitectureCraftClient initClient() {
-        return new ArchitectureCraftClient(this);
-    }
-
-    // -------------------- Configuration ---------------------------------------------------------
-
-    void configure() {}
-
-    void loadConfig() {
-        config = new ArchitectConfiguration(cfgFile);
-    }
-
-    void saveConfig() {
-        if (config.hasChanged()) config.save();
-    }
-
-    // --------------- Resources ----------------------------------------------------------
-
-    public static ResourceLocation resourceLocation(String path) {
-        if (path.contains(":")) return new ResourceLocation(path);
-        else return new ResourceLocation(ASSET_KEY, path);
-    }
-
-    public ResourceLocation modelLocation(String path) {
-        return resourceLocation("models/" + path);
-    }
-
-    public IArchitectureModel getModel(String name) {
-        ResourceLocation loc = modelLocation(name);
-        IArchitectureModel model = content.modelCache.get(loc);
-        if (model == null) {
-            model = ObjJsonModel.fromResource(loc);
-            content.modelCache.put(loc, model);
-        }
-        return model;
-    }
-
-    // ------------------------- Network --------------------------------------------------
-
-    public static void sendTileEntityUpdate(TileEntity te) {
-        Packet packet = te.getDescriptionPacket();
-        if (packet != null) {
-            int x = te.xCoord >> 4;
-            int z = te.zCoord >> 4;
-            WorldServer world = (WorldServer) te.getWorldObj();
-            ServerConfigurationManager cm = FMLCommonHandler.instance().getMinecraftServerInstance()
-                    .getConfigurationManager();
-            PlayerManager pm = world.getPlayerManager();
-            for (EntityPlayerMP player : cm.playerEntityList) if (pm.isPlayerWatchingChunk(player, x, z)) {
-                player.playerNetServerHandler.sendPacket(packet);
-            }
-        }
-    }
+  public static boolean validMaterial(ItemStack stack) {
+    return stack.getItem() instanceof BlockItem bi
+        && bi.getBlock() != SHAPE
+        && bi.getBlock() != SAWBENCH
+        && !bi.getBlock().defaultBlockState().isAir()
+        && !bi.getBlock().defaultBlockState().hasBlockEntity()
+        && (bi.getBlock() instanceof SlabBlock
+            || bi.getBlock()
+                .defaultBlockState()
+                .isCollisionShapeFullBlock(
+                    net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
+                    net.minecraft.core.BlockPos.ZERO));
+  }
 }

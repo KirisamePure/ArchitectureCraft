@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "I*I",
+    "/0/",
+    "/_/"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "*": "architecturecraft:sawblade",
+    "/": "minecraft:stick",
+    "_": "minecraft:oak_pressure_plate",
+    "0": "architecturecraft:large_pulley"
+  },
+  "result": {
+    "id": "architecturecraft:sawbench",
+    "count": 1
+  }
+}

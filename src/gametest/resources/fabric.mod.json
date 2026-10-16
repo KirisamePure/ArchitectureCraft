@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "architecturecraft-test",
+  "version": "1.0.0",
+  "name": "ArchitectureCraft tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "gcewing.architecture.ArchitectureGameTests"
+    ],
+    "fabric-client-gametest": [
+      "gcewing.architecture.client.ArchitectureClientTest"
+    ]
+  },
+  "depends": {
+    "architecturecraft": "*"
+  }
+}

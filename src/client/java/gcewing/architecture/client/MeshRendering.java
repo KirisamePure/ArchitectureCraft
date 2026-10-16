@@ -1,0 +1,101 @@
+package gcewing.architecture.client;
+
+import gcewing.architecture.*;
+import gcewing.architecture.shape.Mesh;
+import java.util.*;
+import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.block.model.*;
+import net.minecraft.client.renderer.texture.*;
+import net.minecraft.core.*;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.state.BlockState;
+
+final class MeshRendering {
+  private MeshRendering() {}
+
+  static BlockStateModel materialModel(BlockState material) {
+    return Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
+  }
+
+  private record Surface(TextureAtlasSprite sprite, int tint) {}
+
+  private static Surface surface(BlockState material, Direction face) {
+    BlockStateModel model = materialModel(material);
+    for (BlockModelPart part : model.collectParts(RandomSource.create(42))) {
+      List<BakedQuad> quads = part.getQuads(face);
+      if (!quads.isEmpty())
+        return new Surface(quads.getFirst().sprite(), quads.getFirst().tintIndex());
+      for (BakedQuad quad : part.getQuads(null))
+        if (quad.direction() == face) return new Surface(quad.sprite(), quad.tintIndex());
+    }
+    return new Surface(model.particleIcon(), -1);
+  }
+
+  static void emit(
+      Mesh mesh,
+      ShapeData data,
+      boolean sawbench,
+      boolean glow,
+      BlockAndTintGetter world,
+      BlockPos pos,
+      QuadEmitter emitter,
+      List<BakedQuad> baked) {
+    Map<String, TextureAtlasSprite> sprites = new HashMap<>();
+    Map<String, Surface> surfaces = new HashMap<>();
+    for (Mesh.Triangle triangle : mesh.triangles()) {
+      Mesh.Vertex a = triangle.a();
+      Direction face =
+          Direction.getApproximateNearest((float) a.nx(), (float) a.ny(), (float) a.nz());
+      BlockState material =
+          triangle.material() >= 2 ? data.secondary().orElse(data.base()) : data.base();
+      TextureAtlasSprite sprite;
+      int color = -1;
+      if (sawbench) {
+        String texture = "block/sawbench_" + (triangle.material() == 0 ? "wood" : "metal");
+        sprite =
+            sprites.computeIfAbsent(
+                texture,
+                k ->
+                    Minecraft.getInstance()
+                        .getAtlasManager()
+                        .getAtlasOrThrow(net.minecraft.data.AtlasIds.BLOCKS)
+                        .getSprite(ArchitectureCraft.id(k)));
+      } else {
+        String key = material.toString() + face;
+        Surface surface = surfaces.computeIfAbsent(key, k -> surface(material, face));
+        sprite = surface.sprite();
+        if (surface.tint() >= 0) {
+          int tint =
+              Minecraft.getInstance()
+                  .getBlockColors()
+                  .getColor(material, world, pos, surface.tint());
+          if (tint != -1) color = 0xff000000 | tint;
+        }
+      }
+      emitter
+          .nominalFace(face)
+          .cullFace(null)
+          .tintIndex(-1)
+          .emissive(glow)
+          .diffuseShade(!glow)
+          .ambientOcclusion(net.fabricmc.fabric.api.util.TriState.of(!glow));
+      emitter.renderLayer(sawbench ? null : ItemBlockRenderTypes.getChunkRenderType(material));
+      Mesh.Vertex[] vertices = {triangle.a(), triangle.b(), triangle.c(), triangle.c()};
+      for (int i = 0; i < 4; i++) {
+        Mesh.Vertex v = vertices[i];
+        emitter
+            .pos(i, (float) v.x(), (float) v.y(), (float) v.z())
+            .normal(i, (float) v.nx(), (float) v.ny(), (float) v.nz())
+            .uv(i, (float) v.u(), (float) v.v())
+            .color(i, color);
+      }
+      emitter.spriteBake(
+          sprite, net.fabricmc.fabric.api.renderer.v1.mesh.MutableQuadView.BAKE_NORMALIZED);
+      if (baked != null) baked.add(emitter.toBakedQuad(sprite));
+      emitter.emit();
+    }
+  }
+}

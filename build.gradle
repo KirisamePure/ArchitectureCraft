@@ -1,5 +1,52 @@
-//version: 1707058017
-
 plugins {
-    id 'com.gtnewhorizons.gtnhconvention'
+    id 'fabric-loom' version '1.13.6'
+    id 'maven-publish'
 }
+
+version = project.mod_version
+group = 'gcewing.architecture'
+base { archivesName = 'architecturecraft' }
+
+loom {
+    splitEnvironmentSourceSets()
+    mods {
+        architecturecraft {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach { options.release = 21 }
+test { useJUnitPlatform() }
+jar { from('LICENSE') }
+
+// Test-only mod and sources are excluded from the distributable jar.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'architecturecraft-test'
+        enableGameTests = true
+        enableClientGameTests = true
+    }
+}
+loom.runs.gameTest.property 'fabric-api.gametest.report-file', file('build/test-results/gametest/results.xml').absolutePath

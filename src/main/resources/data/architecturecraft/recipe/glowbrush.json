@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "  G",
+    " W ",
+    "s  "
+  ],
+  "key": {
+    "G": "minecraft:glowstone_dust",
+    "W": "#minecraft:wool",
+    "s": "minecraft:stick"
+  },
+  "result": {
+    "id": "architecturecraft:glowbrush",
+    "count": 1
+  }
+}

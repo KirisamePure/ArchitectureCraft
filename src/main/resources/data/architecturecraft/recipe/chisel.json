@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "I ",
+    "ds"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "d": "minecraft:orange_dye",
+    "s": "minecraft:stick"
+  },
+  "result": {
+    "id": "architecturecraft:chisel",
+    "count": 1
+  }
+}

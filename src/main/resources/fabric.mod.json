@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "architecturecraft",
+  "version": "${version}",
+  "name": "ArchitectureCraft",
+  "description": "Architectural shapes made from your own building materials.",
+  "authors": [
+    "Greg Ewing",
+    "ArchitectureCraft contributors"
+  ],
+  "contact": {
+    "sources": "https://github.com/KirisamePure/ArchitectureCraft"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "gcewing.architecture.ArchitectureCraft"
+    ],
+    "client": [
+      "gcewing.architecture.client.ArchitectureCraftClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.6",
+    "minecraft": "1.21.10",
+    "java": ">=21",
+    "fabric-api": ">=0.138.4+1.21.10"
+  }
+}

@@ -1,6 +1,7 @@
 {
-    "parent": "block/cube_all",
-    "textures": {
-        "all": "blocks/iron_block"
-    }
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "architecturecraft:block/sawbench_wood",
+    "metal": "architecturecraft:block/sawbench_metal"
+  }
 }

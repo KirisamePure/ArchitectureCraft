@@ -1,0 +1,12 @@
+{
+  "block.architecturecraft.sawbench": "建筑师锯台",
+  "block.architecturecraft.shape": "构件",
+  "block.architecturecraft.shape_glowing": "构件(发光)",
+  "item.architecturecraft.large_pulley": "大轮",
+  "item.architecturecraft.sawblade": "圆锯片",
+  "item.architecturecraft.chisel": "建筑师凿",
+  "item.architecturecraft.hammer": "建筑师锤",
+  "item.architecturecraft.cladding": "覆盖板",
+  "container.architecturecraft.sawbench": "Sawbench",
+  "gui.architecturecraft.cut": "Cut"
+}

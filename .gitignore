@@ -36,3 +36,4 @@ src/main/resources/mixins.*.json
 /wrapper/dists/
 .shelf
 layout.json
+/.gradle/

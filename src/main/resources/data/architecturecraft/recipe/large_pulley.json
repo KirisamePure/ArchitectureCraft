@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " W ",
+    "W/W",
+    " W "
+  ],
+  "key": {
+    "W": "#minecraft:planks",
+    "/": "minecraft:stick"
+  },
+  "result": {
+    "id": "architecturecraft:large_pulley",
+    "count": 1
+  }
+}

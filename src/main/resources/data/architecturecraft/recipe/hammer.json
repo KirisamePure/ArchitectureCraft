@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "II ",
+    "dsI",
+    "ds "
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "d": "minecraft:orange_dye",
+    "s": "minecraft:stick"
+  },
+  "result": {
+    "id": "architecturecraft:hammer",
+    "count": 1
+  }
+}
