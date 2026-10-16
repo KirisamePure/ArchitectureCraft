@@ -51,7 +51,10 @@ public record ShapeData(
   }
 
   public ItemStack stack(int count) {
-    ItemStack stack = new ItemStack(ArchitectureCraft.SHAPE, count);
+    ItemStack stack =
+        new ItemStack(
+            shape() == Shape.CladdingSheet ? ArchitectureCraft.CLADDING : ArchitectureCraft.SHAPE,
+            count);
     stack.set(ArchitectureCraft.SHAPE_DATA, this);
     return stack;
   }

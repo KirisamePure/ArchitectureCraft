@@ -40,12 +40,13 @@ public final class SawbenchBlock extends BaseEntityBlock {
 
   @Override
   public BlockState getStateForPlacement(BlockPlaceContext context) {
-    return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    return defaultBlockState().setValue(FACING, context.getHorizontalDirection());
   }
 
   @Override
   protected InteractionResult useWithoutItem(
       BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+    if (player.isShiftKeyDown()) return InteractionResult.PASS;
     if (!level.isClientSide() && level.getBlockEntity(pos) instanceof SawbenchBlockEntity be)
       player.openMenu(be);
     return InteractionResult.SUCCESS;
@@ -54,7 +55,12 @@ public final class SawbenchBlock extends BaseEntityBlock {
   @Override
   protected VoxelShape getShape(
       BlockState state, BlockGetter world, BlockPos pos, CollisionContext context) {
-    return Shapes.box(0, 0, 0, 1, .75, 1);
+    return ShapeGeometry.voxel(
+        gcewing.architecture.shape.Mesh.model("block/sawbench")
+            .transformed(
+                new gcewing.architecture.shape.Orientation(
+                    1, Math.floorMod(state.getValue(FACING).get2DDataValue() + 2, 4), 0))
+            .boxes());
   }
 
   @Override

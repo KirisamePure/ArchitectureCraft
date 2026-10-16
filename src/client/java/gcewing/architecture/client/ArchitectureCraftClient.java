@@ -8,6 +8,7 @@ import net.minecraft.client.gui.screens.MenuScreens;
 public final class ArchitectureCraftClient implements ClientModInitializer {
   @Override
   public void onInitializeClient() {
+    PlacementPreview.register();
     MenuScreens.register(ArchitectureCraft.SAWBENCH_MENU, SawbenchScreen::new);
     ModelLoadingPlugin.register(
         context -> {

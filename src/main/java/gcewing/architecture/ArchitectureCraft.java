@@ -26,6 +26,11 @@ public final class ArchitectureCraft implements ModInitializer {
     return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
   }
 
+  public static final net.minecraft.tags.TagKey<Block> SAWBENCH_MATERIALS =
+      net.minecraft.tags.TagKey.create(Registries.BLOCK, id("sawbench_materials"));
+  public static final net.minecraft.tags.TagKey<Block> EMISSIVE_MATERIALS =
+      net.minecraft.tags.TagKey.create(Registries.BLOCK, id("emissive_materials"));
+
   public static final DataComponentType<ShapeData> SHAPE_DATA =
       Registry.register(
           BuiltInRegistries.DATA_COMPONENT_TYPE,
@@ -39,6 +44,7 @@ public final class ArchitectureCraft implements ModInitializer {
           "shape",
           new ShapeBlock(
               blockProperties("shape")
+                  .dynamicShape()
                   .strength(2.0F)
                   .noOcclusion()
                   .lightLevel(s -> s.getValue(ShapeBlock.GLOWING) ? 15 : 0)));
@@ -62,7 +68,7 @@ public final class ArchitectureCraft implements ModInitializer {
           "glowbrush",
           new ArchitectTool(itemProperties("glowbrush").stacksTo(1), ArchitectTool.Kind.GLOWBRUSH));
   public static final Item CLADDING =
-      registerItem("cladding", new Item(itemProperties("cladding")));
+      registerItem("cladding", new CladdingItem(itemProperties("cladding")));
   public static final BlockEntityType<ShapeBlockEntity> SHAPE_ENTITY =
       Registry.register(
           BuiltInRegistries.BLOCK_ENTITY_TYPE,
@@ -124,23 +130,25 @@ public final class ArchitectureCraft implements ModInitializer {
                                 Blocks.OAK_PLANKS.defaultBlockState(),
                                 java.util.Optional.empty(),
                                 0,
-                                shape.offset ? 6 : 0)
+                                0)
                             .stack(1));
                 })
             .build());
   }
 
   public static boolean validMaterial(ItemStack stack) {
-    return stack.getItem() instanceof BlockItem bi
-        && bi.getBlock() != SHAPE
-        && bi.getBlock() != SAWBENCH
-        && !bi.getBlock().defaultBlockState().isAir()
-        && !bi.getBlock().defaultBlockState().hasBlockEntity()
+    if (!(stack.getItem() instanceof BlockItem bi)
+        || bi.getBlock() == SHAPE
+        || bi.getBlock() == SAWBENCH) return false;
+    var state = bi.getBlock().defaultBlockState();
+    if (state.is(SAWBENCH_MATERIALS)) return true;
+    return !state.hasBlockEntity()
         && (bi.getBlock() instanceof SlabBlock
-            || bi.getBlock()
-                .defaultBlockState()
-                .isCollisionShapeFullBlock(
+            || bi.getBlock() == Blocks.GLASS
+            || bi.getBlock() instanceof StainedGlassBlock
+            || state.isCollisionShapeFullBlock(
                     net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
-                    net.minecraft.core.BlockPos.ZERO));
+                    net.minecraft.core.BlockPos.ZERO)
+                && state.canOcclude());
   }
 }

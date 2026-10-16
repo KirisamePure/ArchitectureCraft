@@ -15,13 +15,16 @@ import org.joml.Vector3f;
 final class ArchitectureItemModel implements ItemModel {
   private record Key(ShapeData data, boolean glow) {}
 
+  private record Surface(
+      net.minecraft.world.level.block.state.BlockState material, List<BakedQuad> quads) {}
+
   private final String kind;
   // Bounded and tied to this reload's model instance; no stale sprites after resource reload.
-  private final Map<Key, List<BakedQuad>> cache =
+  private final Map<Key, List<Surface>> cache =
       Collections.synchronizedMap(
           new LinkedHashMap<>(64, .75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<Key, List<BakedQuad>> e) {
+            protected boolean removeEldestEntry(Map.Entry<Key, List<Surface>> e) {
               return size() > 256;
             }
           });
@@ -46,7 +49,7 @@ final class ArchitectureItemModel implements ItemModel {
         properties != null
             ? "true".equals(properties.properties().get("glowing"))
             : data.shape().glowing();
-    List<BakedQuad> quads =
+    List<Surface> surfaces =
         cache.computeIfAbsent(
             new Key(data, glow),
             key -> {
@@ -57,6 +60,8 @@ final class ArchitectureItemModel implements ItemModel {
                           ? Mesh.model("shape/cladding")
                           : ShapeGeometry.mesh(
                               data, ArchitectureCraft.SHAPE.defaultBlockState(), null, null);
+              if (!sawbench && !kind.equals("cladding"))
+                mesh = mesh.transformed(Orientation.legacy(0, 3, 0));
               List<BakedQuad> result = new ArrayList<>();
               MeshRendering.emit(
                   mesh,
@@ -67,21 +72,22 @@ final class ArchitectureItemModel implements ItemModel {
                   null,
                   Renderer.get().mutableMesh().emitter(),
                   result);
-              return List.copyOf(result);
+              Map<net.minecraft.world.level.block.state.BlockState, List<BakedQuad>> grouped =
+                  new LinkedHashMap<>();
+              for (int i = 0; i < result.size(); i++) {
+                var material =
+                    mesh.triangles().get(i).material() >= 2
+                        ? data.secondary().orElse(data.base())
+                        : data.base();
+                grouped.computeIfAbsent(material, ignored -> new ArrayList<>()).add(result.get(i));
+              }
+              return grouped.entrySet().stream()
+                  .map(e -> new Surface(e.getKey(), List.copyOf(e.getValue())))
+                  .toList();
             });
-    if (quads.stream().anyMatch(q -> q.sprite().contents().isAnimated())) state.setAnimated();
     state.appendModelIdentityElement(this);
     state.appendModelIdentityElement(data);
     state.appendModelIdentityElement(glow);
-    var layer = state.newLayer();
-    layer.prepareQuadList().addAll(quads);
-    layer.setUsesBlockLight(true);
-    layer.setParticleIcon(
-        quads.isEmpty()
-            ? MeshRendering.materialModel(data.base()).particleIcon()
-            : quads.getFirst().sprite());
-    layer.setRenderType(ItemBlockRenderTypes.getRenderType(data.secondary().orElse(data.base())));
-    layer.setExtents(() -> new Vector3f[] {new Vector3f(), new Vector3f(1, 1, 1)});
     ItemTransform transform =
         switch (display) {
           case GUI ->
@@ -94,6 +100,16 @@ final class ArchitectureItemModel implements ItemModel {
               new ItemTransform(
                   new Vector3f(75, 45, 0), new Vector3f(0, .15625f, 0), new Vector3f(.375f));
         };
-    layer.setTransform(transform);
+    for (Surface surface : surfaces) {
+      if (surface.quads().stream().anyMatch(q -> q.sprite().contents().isAnimated()))
+        state.setAnimated();
+      var layer = state.newLayer();
+      layer.prepareQuadList().addAll(surface.quads());
+      layer.setUsesBlockLight(true);
+      layer.setParticleIcon(surface.quads().getFirst().sprite());
+      layer.setRenderType(ItemBlockRenderTypes.getRenderType(surface.material()));
+      layer.setExtents(() -> new Vector3f[] {new Vector3f(), new Vector3f(1, 1, 1)});
+      layer.setTransform(transform);
+    }
   }
 }

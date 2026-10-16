@@ -1,0 +1,149 @@
+[
+  {
+    "category": "roofing",
+    "shapes": [
+      "RoofTile",
+      "RoofOuterCorner",
+      "RoofInnerCorner",
+      "RoofRidge",
+      "RoofSmartRidge",
+      "RoofValley",
+      "RoofSmartValley",
+      "RoofOverhang",
+      "RoofOverhangOuterCorner",
+      "RoofOverhangInnerCorner",
+      "RoofOverhangGableLH",
+      "RoofOverhangGableRH",
+      "RoofOverhangGableEndLH",
+      "RoofOverhangGableEndRH",
+      "RoofOverhangRidge",
+      "RoofOverhangValley",
+      "BevelledOuterCorner",
+      "BevelledInnerCorner"
+    ]
+  },
+  {
+    "category": "rounded",
+    "shapes": [
+      "Cylinder",
+      "CylinderHalf",
+      "CylinderQuarter",
+      "CylinderLargeQuarter",
+      "AnticylinderLargeQuarter",
+      "Pillar",
+      "Post",
+      "Pole",
+      "SphereFull",
+      "SphereHalf",
+      "SphereQuarter",
+      "SphereEighth",
+      "SphereEighthLarge",
+      "SphereEighthLargeRev"
+    ]
+  },
+  {
+    "category": "classical",
+    "shapes": [
+      "PillarBase",
+      "Pillar",
+      "DoricCapital",
+      "DoricTriglyph",
+      "DoricTriglyphCorner",
+      "DoricMetope",
+      "IonicCapital",
+      "CorinthianCapital",
+      "Architrave",
+      "ArchitraveCorner",
+      "CorniceLH",
+      "CorniceRH",
+      "CorniceEndLH",
+      "CorniceEndRH",
+      "CorniceRidge",
+      "CorniceValley",
+      "CorniceBottom"
+    ]
+  },
+  {
+    "category": "window",
+    "shapes": [
+      "WindowFrame",
+      "WindowCorner",
+      "WindowMullion"
+    ]
+  },
+  {
+    "category": "arches",
+    "shapes": [
+      "ArchD1",
+      "ArchD2",
+      "ArchD3A",
+      "ArchD3B",
+      "ArchD3C",
+      "ArchD4A",
+      "ArchD4B",
+      "ArchD4C"
+    ]
+  },
+  {
+    "category": "railings",
+    "shapes": [
+      "BalustradePlain",
+      "BalustradePlainOuterCorner",
+      "BalustradePlainInnerCorner",
+      "BalustradePlainWithNewel",
+      "BalustradePlainEnd",
+      "BanisterPlainTop",
+      "BanisterPlain",
+      "BanisterPlainBottom",
+      "BanisterPlainEnd",
+      "BanisterPlainInnerCorner",
+      "BalustradeFancy",
+      "BalustradeFancyCorner",
+      "BalustradeFancyWithNewel",
+      "BalustradeFancyNewel",
+      "BanisterFancyTop",
+      "BanisterFancy",
+      "BanisterFancyBottom",
+      "BanisterFancyEnd",
+      "BanisterFancyNewelTall"
+    ]
+  },
+  {
+    "category": "other",
+    "shapes": [
+      "CladdingSheet",
+      "Slab",
+      "Stairs",
+      "StairsOuterCorner",
+      "StairsInnerCorner",
+      "SlopeTileA1",
+      "SlopeTileA2",
+      "SlopeTileB1",
+      "SlopeTileB2",
+      "SlopeTileB3",
+      "SlopeTileC1",
+      "SlopeTileC2",
+      "SlopeTileC3",
+      "SlopeTileC4",
+      "AngledRoofRidge",
+      "DoubleRoofTile"
+    ]
+  },
+  {
+    "category": "glow",
+    "shapes": [
+      "SquareSE",
+      "SlabSE",
+      "RoofTileSE",
+      "SlopeTileA1SE",
+      "SlopeTileA2SE",
+      "SlopeTileB1SE",
+      "SlopeTileB2SE",
+      "SlopeTileB3SE",
+      "SlopeTileC1SE",
+      "SlopeTileC2SE",
+      "SlopeTileC3SE",
+      "SlopeTileC4SE"
+    ]
+  }
+]

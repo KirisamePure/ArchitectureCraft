@@ -1,100 +1,114 @@
 package gcewing.architecture.shape;
 
+import static gcewing.architecture.shape.WindowTopology.*;
+
 import java.util.*;
 
-/** Frames connect to adjacent windows; glass is a separate material and collision layer. */
+/**
+ * Direct port of RenderWindow: side frames, diagonal caps, centre ends, glazing and exposed glass
+ * edges.
+ */
 public final class WindowMesh {
+  private WindowMesh() {}
+
   @FunctionalInterface
   public interface Connected {
     boolean test(int x, int y, int z);
   }
 
-  private WindowMesh() {}
-
+  // Convenience for isolated geometry tests; production uses full 3x3x3 topology snapshots.
   public static Mesh create(Shape shape, Connected connected, boolean glass) {
-    List<Mesh> parts = new ArrayList<>();
+    Entry self = new Entry(shape.id, 1, 0, 0, glass);
+    return create(
+        self,
+        (x, y, z) ->
+            x == 0 && y == 0 && z == 0 ? self : connected.test(x, y, z) ? self : Entry.EMPTY);
+  }
+
+  private static Mesh model(String name, boolean glass) {
+    Mesh mesh = Mesh.model("shape/window_" + name);
+    return glass
+        ? new Mesh(
+            mesh.triangles().stream().map(t -> new Mesh.Triangle(2, t.a(), t.b(), t.c())).toList(),
+            mesh.boxes())
+        : mesh;
+  }
+
+  private static Mesh rotated(String name, int i, boolean corner, boolean glass) {
+    return MeshRotation.apply(model(name, glass), i, corner && (i == 1 || i == 2) ? -1 : 0);
+  }
+
+  public static Mesh create(Entry self, Neighborhood world) {
+    Shape shape = self.shape();
     boolean corner = shape == Shape.WindowCorner, mullion = shape == Shape.WindowMullion;
-    String centre = corner ? "corner_centre" : mullion ? "mullion_centre" : null;
-    if (centre != null) parts.add(Mesh.model("shape/window_" + centre));
-    int[][] dirs =
-        corner
-            ? new int[][] {{0, -1, 0}, {0, 0, 1}, {0, 1, 0}, {-1, 0, 0}}
-            : new int[][] {{0, -1, 0}, {1, 0, 0}, {0, 1, 0}, {-1, 0, 0}};
-    boolean[] frame = new boolean[4];
-    for (int i = 0; i < 4; i++) frame[i] = !connected.test(dirs[i][0], dirs[i][1], dirs[i][2]);
+    boolean[][] frame = flags(self, world);
+    List<Mesh> parts = new ArrayList<>();
+    if (corner || mullion) parts.add(model(corner ? "corner_centre" : "mullion_centre", false));
     for (int i = 0; i < 4; i++) {
-      String side =
-          (i % 2 == 0 && (corner || mullion))
-              ? (corner ? "corner_topbot" : "mullion_topbot")
-              : "frame_side";
-      if (frame[i])
+      int j = (i + 3) & 3, k = (i + 1) & 3;
+      if (frame[i][1])
         parts.add(
-            rotate(Mesh.model("shape/window_" + side), i, corner && (i == 1 || i == 2) ? -1 : 0));
-      else if ((corner || mullion) && i % 2 == 0)
+            rotated(
+                i % 2 == 0 && (corner || mullion)
+                    ? (corner ? "corner_topbot" : "mullion_topbot")
+                    : "frame_side",
+                i,
+                corner,
+                false));
+      else if (i % 2 == 0 && (corner || mullion))
+        parts.add(model((corner ? "corner" : "mullion") + "_centre_end" + i, false));
+      if (frame[i][1] && !frame[j][1] || frame[i][0] && frame[j][2])
+        parts.add(rotated("frame_end0", i, corner, false));
+      if (frame[i][1] && !frame[k][1] || frame[i][2] && frame[k][0])
         parts.add(
-            Mesh.model("shape/window_" + (corner ? "corner" : "mullion") + "_centre_end" + i));
-      if (frame[i] && !frame[(i + 3) % 4])
+            rotated(corner && i % 2 == 0 ? "corner_topbot_end1" : "frame_end1", i, corner, false));
+      if (self.glazed() && !frame[i][1] && !frame[i][3])
         parts.add(
-            rotate(
-                Mesh.model("shape/window_frame_end0"), i, corner && (i == 1 || i == 2) ? -1 : 0));
-      if (frame[i] && !frame[(i + 1) % 4]) {
-        String end = corner && i % 2 == 0 ? "corner_topbot_end1" : "frame_end1";
-        parts.add(
-            rotate(Mesh.model("shape/window_" + end), i, corner && (i == 1 || i == 2) ? -1 : 0));
-      }
+            rotated(
+                i % 2 == 0 && (corner || mullion)
+                    ? (corner ? "corner_glass_edge" : "mullion_glass_edge")
+                    : "glass_edge",
+                i,
+                corner,
+                true));
     }
-    if (glass) {
-      Mesh m = Mesh.model("shape/window_" + (corner ? "corner_glass" : "glass"));
-      parts.add(
-          new Mesh(
-              m.triangles().stream().map(t -> new Mesh.Triangle(2, t.a(), t.b(), t.c())).toList(),
-              m.boxes()));
-    }
-    return Mesh.join(parts);
+    if (self.glazed()) parts.add(model(corner ? "corner_glass" : "glass", true));
+    return new Mesh(Mesh.join(parts).triangles(), collision(self, world, true));
   }
 
-  private static Mesh rotate(Mesh mesh, int z, int y) {
-    List<Mesh.Triangle> ts = new ArrayList<>();
-    for (Mesh.Triangle t : mesh.triangles())
-      ts.add(
-          new Mesh.Triangle(
-              t.material(), vertex(t.a(), z, y), vertex(t.b(), z, y), vertex(t.c(), z, y)));
+  public static List<Mesh.Box> collision(Entry self, Neighborhood world, boolean selection) {
+    Shape shape = self.shape();
+    boolean corner = shape == Shape.WindowCorner, mullion = shape == Shape.WindowMullion;
+    double r = 1 / 8., s = 3 / 32., w = 1 / 32.;
     List<Mesh.Box> boxes = new ArrayList<>();
-    for (Mesh.Box b : mesh.boxes()) {
-      double[] min = {100, 100, 100}, max = {-100, -100, -100};
-      for (double x : new double[] {b.x0(), b.x1()})
-        for (double yy : new double[] {b.y0(), b.y1()})
-          for (double zz : new double[] {b.z0(), b.z1()}) {
-            Mesh.Vertex v = vertex(new Mesh.Vertex(x, yy, zz, 0, 0, 0, 0, 0), z, y);
-            double[] p = {v.x(), v.y(), v.z()};
-            for (int i = 0; i < 3; i++) {
-              min[i] = Math.min(min[i], p[i]);
-              max[i] = Math.max(max[i], p[i]);
-            }
-          }
-      boxes.add(new Mesh.Box(min[0], min[1], min[2], max[0], max[1], max[2]));
+    double[] e = new double[4];
+    if (corner) boxes.add(new Mesh.Box(.5 - r, 0, .5 - r, .5 + r, 1, .5 + r));
+    else if (mullion) boxes.add(new Mesh.Box(.5 - r, 0, .5 - s, .5 + r, 1, .5 + s));
+    int[] sides = sides(shape);
+    for (int i = 0; i < 4; i++) {
+      boolean frame =
+          connected(self, 0, 0, 0, self.orientation().globalFace(sides[i]), world) == null;
+      if (selection || frame) {
+        List<Mesh.Box> local = new ArrayList<>();
+        if (corner && i % 2 == 0) {
+          local.add(new Mesh.Box(0, 0, .5 - s, .5 + s, r, .5 + s));
+          local.add(new Mesh.Box(.5 - s, 0, .5 - s, .5 + s, r, 1));
+        } else local.add(new Mesh.Box(0, 0, .5 - s, 1, r, .5 + s));
+        boxes.addAll(
+            MeshRotation.apply(new Mesh(List.of(), local), i, corner && (i == 1 || i == 2) ? -1 : 0)
+                .boxes());
+      }
+      e[i] = frame ? .5 - r : .5;
     }
-    return new Mesh(List.copyOf(ts), List.copyOf(boxes));
-  }
-
-  private static Mesh.Vertex vertex(Mesh.Vertex v, int z, int y) {
-    double x = v.x() - .5, yy = v.y() - .5, zz = v.z() - .5, nx = v.nx(), ny = v.ny(), nz = v.nz();
-    for (int i = 0; i < Math.floorMod(z, 4); i++) {
-      double t = x;
-      x = -yy;
-      yy = t;
-      t = nx;
-      nx = -ny;
-      ny = t;
+    if (self.glazed()) {
+      if (corner) {
+        boxes.add(new Mesh.Box(.5 - e[3], .5 - e[0], .5 - w, .5 - s, .5 + e[2], .5 + w));
+        boxes.add(new Mesh.Box(.5 - w, .5 - e[0], .5 + s, .5 + w, .5 + e[2], .5 + e[1]));
+      } else if (mullion) {
+        boxes.add(new Mesh.Box(.5 - e[3], .5 - e[0], .5 - w, .5 - r, .5 + e[2], .5 + w));
+        boxes.add(new Mesh.Box(.5 + r, .5 - e[0], .5 - w, .5 + e[1], .5 + e[2], .5 + w));
+      } else boxes.add(new Mesh.Box(.5 - e[3], .5 - e[0], .5 - w, .5 + e[1], .5 + e[2], .5 + w));
     }
-    for (int i = 0; i < Math.floorMod(y, 4); i++) {
-      double t = x;
-      x = -zz;
-      zz = t;
-      t = nx;
-      nx = -nz;
-      nz = t;
-    }
-    return new Mesh.Vertex(x + .5, yy + .5, zz + .5, v.u(), v.v(), nx, ny, nz);
+    return List.copyOf(boxes);
   }
 }

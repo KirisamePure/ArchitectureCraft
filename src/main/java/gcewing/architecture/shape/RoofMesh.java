@@ -37,38 +37,7 @@ public final class RoofMesh {
   public static Mesh create(Shape shape, Neighbors neighbors) {
     RoofMesh builder = new RoofMesh(shape, neighbors);
     builder.render();
-    // Slice the actual tessellated roof, so shallow slopes and inner corners have matching
-    // collision.
-    List<Mesh.Box> boxes = new ArrayList<>();
-    for (int x = 0; x < 16; x++)
-      for (int z = 0; z < 16; z++) {
-        double px = (x + .5) / 16., pz = (z + .5) / 16., height = 0;
-        for (Mesh.Triangle t : builder.triangles) {
-          if (t.a().ny() <= .01) continue;
-          double ax = t.a().x(),
-              az = t.a().z(),
-              bx = t.b().x(),
-              bz = t.b().z(),
-              cx = t.c().x(),
-              cz = t.c().z();
-          double d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-          if (Math.abs(d) < 1e-10) continue;
-          double a = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / d;
-          double b = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / d;
-          if (a >= -1e-8 && b >= -1e-8 && a + b <= 1 + 1e-8)
-            height = Math.max(height, a * t.a().y() + b * t.b().y() + (1 - a - b) * t.c().y());
-        }
-        if (height > 0)
-          boxes.add(
-              new Mesh.Box(
-                  x / 16.,
-                  0,
-                  z / 16.,
-                  (x + 1) / 16.,
-                  Math.min(1, Math.ceil(height * 16) / 16),
-                  (z + 1) / 16.));
-      }
-    return new Mesh(List.copyOf(builder.triangles), List.copyOf(boxes));
+    return new Mesh(List.copyOf(builder.triangles), CollisionMask.boxes(shape));
   }
 
   public void render() {

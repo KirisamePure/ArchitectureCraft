@@ -53,7 +53,10 @@ public final class ArchitectureBlockModel implements BlockStateModel {
         sawbench
             ? Mesh.model("block/sawbench")
                 .transformed(
-                    new Orientation(1, state.getValue(SawbenchBlock.FACING).get2DDataValue(), 0))
+                    new Orientation(
+                        1,
+                        Math.floorMod(state.getValue(SawbenchBlock.FACING).get2DDataValue() + 2, 4),
+                        0))
             : ShapeGeometry.mesh(data, state, world, pos);
     MeshRendering.emit(
         mesh,

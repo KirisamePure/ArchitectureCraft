@@ -79,17 +79,42 @@ final class MeshRendering {
           .nominalFace(face)
           .cullFace(null)
           .tintIndex(-1)
-          .emissive(glow)
+          .emissive(glow || material.is(ArchitectureCraft.EMISSIVE_MATERIALS))
           .diffuseShade(!glow)
           .ambientOcclusion(net.fabricmc.fabric.api.util.TriState.of(!glow));
       emitter.renderLayer(sawbench ? null : ItemBlockRenderTypes.getChunkRenderType(material));
       Mesh.Vertex[] vertices = {triangle.a(), triangle.b(), triangle.c(), triangle.c()};
       for (int i = 0; i < 4; i++) {
         Mesh.Vertex v = vertices[i];
+        double u = v.u(), vv = v.v();
+        if ((triangle.material() & 1) != 0 && !sawbench) {
+          switch (face) {
+            case UP, DOWN -> {
+              u = v.x();
+              vv = v.z();
+            }
+            case NORTH -> {
+              u = 1 - v.x();
+              vv = 1 - v.y();
+            }
+            case SOUTH -> {
+              u = v.x();
+              vv = 1 - v.y();
+            }
+            case WEST -> {
+              u = 1 - v.z();
+              vv = 1 - v.y();
+            }
+            case EAST -> {
+              u = v.z();
+              vv = 1 - v.y();
+            }
+          }
+        }
         emitter
             .pos(i, (float) v.x(), (float) v.y(), (float) v.z())
             .normal(i, (float) v.nx(), (float) v.ny(), (float) v.nz())
-            .uv(i, (float) v.u(), (float) v.v())
+            .uv(i, (float) u, (float) vv)
             .color(i, color);
       }
       emitter.spriteBake(

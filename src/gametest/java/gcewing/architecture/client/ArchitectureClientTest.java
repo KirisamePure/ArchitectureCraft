@@ -1,40 +1,94 @@
 package gcewing.architecture.client;
 
 import gcewing.architecture.*;
-import gcewing.architecture.shape.Shape;
+import gcewing.architecture.shape.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+import net.fabricmc.fabric.api.renderer.v1.Renderer;
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.core.*;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.*;
+import net.minecraft.world.phys.BlockHitResult;
 
-/** Exercises model loading, every materialized shape item, chunk meshes and the sawbench screen. */
+/**
+ * Real mouse input, real server menus and actual preview extraction/rendering, not a synthetic
+ * replacement GUI.
+ */
 public final class ArchitectureClientTest implements FabricClientGameTest {
+  private static void click(ClientGameTestContext context, int x, int y, int button) {
+    double[] pos =
+        context.computeOnClient(
+            mc -> {
+              var screen = (SawbenchScreen) mc.screen;
+              var window = mc.getWindow();
+              return new double[] {
+                (screen.guiLeft() + x)
+                    * (double) window.getScreenWidth()
+                    / window.getGuiScaledWidth(),
+                (screen.guiTop() + y)
+                    * (double) window.getScreenHeight()
+                    / window.getGuiScaledHeight()
+              };
+            });
+    context.getInput().setCursorPos(pos[0], pos[1]);
+    context.getInput().pressMouse(button);
+  }
+
   @Override
   public void runTest(ClientGameTestContext context) {
     context.runOnClient(
         mc -> {
-          var resolver = mc.getItemModelResolver();
           for (Shape shape : Shape.values()) {
-            ShapeData data =
+            var data =
                 new ShapeData(
                     shape.id,
                     Blocks.BRICKS.defaultBlockState(),
                     shape.window()
-                        ? Optional.of(Blocks.GLASS.defaultBlockState())
+                        ? Optional.of(Blocks.GLASS_PANE.defaultBlockState())
                         : Optional.empty(),
                     0,
                     0);
-            ItemStackRenderState state = new ItemStackRenderState();
-            resolver.updateForTopItem(state, data.stack(1), ItemDisplayContext.GUI, null, null, 42);
-            if (state.isEmpty()) throw new AssertionError("Empty item model for " + shape);
-            var model =
-                mc.getBlockRenderer().getBlockModel(ArchitectureCraft.SHAPE.defaultBlockState());
-            if (!(model instanceof ArchitectureBlockModel))
-              throw new AssertionError("Custom shape model not installed");
+            var item = new ItemStackRenderState();
+            mc.getItemModelResolver()
+                .updateForTopItem(item, data.stack(1), ItemDisplayContext.GUI, null, null, 42);
+            if (item.isEmpty()) throw new AssertionError("Empty item model: " + shape);
           }
+          if (!(mc.getBlockRenderer().getBlockModel(ArchitectureCraft.SHAPE.defaultBlockState())
+              instanceof ArchitectureBlockModel))
+            throw new AssertionError("Custom shape model missing");
+          var data = new ShapeData(0, Blocks.BRICKS.defaultBlockState(), Optional.empty(), 0, 0);
+          List<BakedQuad> quads = new ArrayList<>();
+          MeshRendering.emit(
+              RoofMesh.create(Shape.RoofTile, (x, y, z) -> null),
+              data,
+              false,
+              false,
+              null,
+              null,
+              Renderer.get().mutableMesh().emitter(),
+              quads);
+          var sprite = quads.getFirst().sprite();
+          double min = Double.POSITIVE_INFINITY, max = Double.NEGATIVE_INFINITY;
+          for (var quad : quads)
+            for (int v = 0; v < 4; v++) {
+              float u = Float.intBitsToFloat(quad.vertices()[v * 8 + 4]);
+              min = Math.min(min, u);
+              max = Math.max(max, u);
+            }
+          if (max - min < (sprite.getU1() - sprite.getU0()) * .9)
+            throw new AssertionError("Model UVs must cover the material texture");
+        });
+    AtomicReference<PlacementPreview.Snapshot> preview = new AtomicReference<>();
+    WorldRenderEvents.END_EXTRACTION.register(
+        frame -> {
+          var data = frame.worldState().getData(PlacementPreview.PREVIEW);
+          if (data != null) preview.set(data);
         });
     try (var world = context.worldBuilder().create()) {
       world
@@ -62,30 +116,44 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
                               .stack(1));
                 int i = 0;
                 for (Shape shape : Shape.values()) {
+                  if (shape == Shape.CladdingSheet) continue;
                   BlockPos pos = new BlockPos((i % 12) * 2 - 12, 3, (i / 12) * 2 - 12);
                   i++;
                   level.setBlockAndUpdate(pos, ArchitectureCraft.SHAPE.defaultBlockState());
-                  var be = (ShapeBlockEntity) level.getBlockEntity(pos);
-                  be.setData(
-                      new ShapeData(
-                          shape.id,
-                          Blocks.BRICKS.defaultBlockState(),
-                          shape.window()
-                              ? Optional.of(Blocks.GLASS.defaultBlockState())
-                              : Optional.empty(),
-                          0,
-                          0));
+                  ((ShapeBlockEntity) level.getBlockEntity(pos))
+                      .setData(
+                          new ShapeData(
+                              shape.id,
+                              Blocks.BRICKS.defaultBlockState(),
+                              shape.window()
+                                  ? Optional.of(Blocks.GLASS_PANE.defaultBlockState())
+                                  : Optional.empty(),
+                              0,
+                              0));
                 }
                 level.setBlockAndUpdate(
                     new BlockPos(0, 3, 8), ArchitectureCraft.SAWBENCH.defaultBlockState());
               });
       context.waitFor(mc -> mc.player != null && mc.player.getY() > 5);
-      world.getClientWorld().waitForChunksRender();
       context.runOnClient(
           mc -> {
-            if (!mc.level.getBlockState(new BlockPos(0, 3, 8)).is(ArchitectureCraft.SAWBENCH))
-              throw new AssertionError("Sawbench chunk was not synchronized");
+            var data =
+                new ShapeData(0, Blocks.REDSTONE_BLOCK.defaultBlockState(), Optional.empty(), 0, 0);
+            List<BakedQuad> quads = new ArrayList<>();
+            MeshRendering.emit(
+                RoofMesh.create(Shape.RoofTile, (x, y, z) -> null),
+                data,
+                false,
+                false,
+                null,
+                null,
+                Renderer.get().mutableMesh().emitter(),
+                quads);
+            if (quads.stream().anyMatch(q -> q.lightEmission() != 15))
+              throw new AssertionError(
+                  "Tagged material should render full-bright without a glowbrush");
           });
+      world.getClientWorld().waitForChunksRender();
       context.takeScreenshot("architecturecraft-shapes");
       world
           .getServer()
@@ -93,22 +161,124 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
               server -> {
                 var player = server.getPlayerList().getPlayers().getFirst();
                 player.connection.teleport(0, 6, 10, 180, 20);
-                var bench =
-                    (SawbenchBlockEntity) server.overworld().getBlockEntity(new BlockPos(0, 3, 8));
-                bench.setItem(0, new ItemStack(Blocks.BRICKS, 32));
-                player.openMenu(bench);
+                player.openMenu(
+                    (SawbenchBlockEntity) server.overworld().getBlockEntity(new BlockPos(0, 3, 8)));
               });
       context.waitForScreen(SawbenchScreen.class);
-      context.clickScreenButton("gui.architecturecraft.cut");
-      context.waitFor(mc -> mc.player.containerMenu.getSlot(1).hasItem());
+      click(context, 44 + 3 * 24 + 12, 23 + 24 + 12, 0);
+      context.waitFor(mc -> ((SawbenchMenu) mc.player.containerMenu).selectedSlot(0) == 8);
+      click(context, 176 + 10, 19 + 10 + 5, 0);
+      context.waitFor(mc -> ((SawbenchMenu) mc.player.containerMenu).page() == 1);
+      click(context, 44 + 24 + 12, 23 + 24 + 12, 0);
+      context.waitFor(mc -> ((SawbenchMenu) mc.player.containerMenu).selectedSlot(1) == 6);
+      click(context, 176 + 10, 19 + 5, 0);
+      context.waitFor(mc -> ((SawbenchMenu) mc.player.containerMenu).page() == 0);
       context.runOnClient(
           mc -> {
-            var output = mc.player.containerMenu.getSlot(1).getItem();
-            if (output.getCount() != 2 || !ShapeData.fromStack(output).base().is(Blocks.BRICKS))
-              throw new AssertionError("Sawbench network craft failed");
+            var menu = (SawbenchMenu) mc.player.containerMenu;
+            if (menu.selectedSlot(0) != 8 || menu.selectedShape() != Shape.RoofOverhangOuterCorner)
+              throw new AssertionError("Category switching lost selection");
           });
-      context.takeScreenshot("architecturecraft-sawbench");
-      context.setScreen(() -> null);
+      context.takeScreenshot("architecturecraft-sawbench-reference-ui");
+      world
+          .getServer()
+          .runOnServer(
+              server ->
+                  ((SawbenchBlockEntity) server.overworld().getBlockEntity(new BlockPos(0, 3, 8)))
+                      .setItem(0, new ItemStack(Blocks.BRICKS, 32)));
+      context.waitFor(mc -> mc.player.containerMenu.getSlot(1).getItem().getCount() == 3);
+      context.runOnClient(
+          mc -> {
+            if (mc.player.containerMenu.getSlot(0).getItem().getCount() != 32)
+              throw new AssertionError("Preview charged material");
+          });
+      click(context, 12 + 8, 57 + 8, 0);
+      context.waitFor(
+          mc ->
+              mc.player.containerMenu.getCarried().getCount() == 3
+                  && mc.player.containerMenu.getSlot(0).getItem().getCount() == 31);
+      context.takeScreenshot("architecturecraft-sawbench-crafting");
+      context.runOnClient(mc -> mc.screen.onClose());
+      context.waitForScreen(null);
+      // Place a preview anchor away from the catalog and aim at it within interaction range.
+      var anchor = new BlockPos(16, 3, 8);
+      world
+          .getServer()
+          .runOnServer(
+              server -> {
+                var player = server.getPlayerList().getPlayers().getFirst();
+                server.overworld().setBlockAndUpdate(anchor, Blocks.STONE.defaultBlockState());
+                player
+                    .getInventory()
+                    .setItem(
+                        0,
+                        new ShapeData(
+                                Shape.RoofTile.id,
+                                Blocks.BRICKS.defaultBlockState(),
+                                Optional.empty(),
+                                0,
+                                0)
+                            .stack(1));
+                player.connection.teleport(16.5, 5, 11.5, 180, 41.13f);
+              });
+      context.waitFor(
+          mc -> mc.hitResult instanceof BlockHitResult hit && hit.getBlockPos().equals(anchor));
+      context.waitFor(mc -> preview.get() != null && preview.get().pos().equals(anchor.above()));
+      var expected = preview.get();
+      if (expected.quads().isEmpty()) throw new AssertionError("Placement preview is empty");
+      context.takeScreenshot("architecturecraft-placement-preview");
+      context.runOnClient(
+          mc ->
+              mc.gameMode.useItemOn(
+                  mc.player, InteractionHand.MAIN_HAND, (BlockHitResult) mc.hitResult));
+      context.waitFor(mc -> mc.level.getBlockEntity(anchor.above()) instanceof ShapeBlockEntity);
+      context.runOnClient(
+          mc -> {
+            var be = (ShapeBlockEntity) mc.level.getBlockEntity(anchor.above());
+            if (!be.getBlockState().equals(expected.plan().state())
+                || !be.data().equals(expected.plan().data()))
+              throw new AssertionError("Preview differs from actual placement");
+          });
+      context.takeScreenshot("architecturecraft-preview-placed");
+      world
+          .getServer()
+          .runOnServer(
+              server -> {
+                var be = (ShapeBlockEntity) server.overworld().getBlockEntity(anchor.above());
+                be.setData(
+                    new ShapeData(
+                        Shape.WindowFrame.id,
+                        Blocks.BRICKS.defaultBlockState(),
+                        Optional.empty(),
+                        0,
+                        0));
+                server
+                    .overworld()
+                    .setBlockAndUpdate(anchor.above(), ArchitectureCraft.SHAPE.defaultBlockState());
+              });
+      context.waitFor(
+          mc ->
+              mc.level.getBlockEntity(anchor.above()) instanceof ShapeBlockEntity be
+                  && be.data().shape() == Shape.WindowFrame);
+      context.runOnClient(
+          mc -> {
+            var be = (ShapeBlockEntity) mc.level.getBlockEntity(anchor.above());
+            var boxes =
+                ShapeGeometry.collision(
+                        be.data(), be.getBlockState(), mc.level, be.getBlockPos(), true)
+                    .toAabbs();
+            var box = boxes.stream().filter(b -> b.getYsize() < .2).findFirst().orElseThrow();
+            var center =
+                box.getCenter()
+                    .add(be.getBlockPos().getX(), be.getBlockPos().getY(), be.getBlockPos().getZ());
+            var hit =
+                new BlockHitResult(
+                    center.add(0, 0, box.getZsize() / 2), Direction.SOUTH, be.getBlockPos(), false);
+            var outline = PlacementPreview.outline(be, center.add(0, 0, 3), hit);
+            if (outline.toAabbs().size() != 1 || outline.bounds().getYsize() >= .2)
+              throw new AssertionError(
+                  "Window outline must highlight the selected frame, not the whole window");
+          });
     }
   }
 }

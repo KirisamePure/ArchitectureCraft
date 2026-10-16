@@ -1,6 +1,7 @@
 package gcewing.architecture;
 
 import gcewing.architecture.shape.*;
+import gcewing.architecture.shape.WindowTopology.*;
 import java.util.*;
 import java.util.function.Supplier;
 import net.minecraft.core.*;
@@ -8,14 +9,17 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.*;
 
+/** Immutable neighborhood keys keep chunk workers independent of mutable block entities. */
 public final class ShapeGeometry {
-  private record LocalKey(Shape shape, List<Integer> neighbors, boolean glass) {}
+  private record LocalKey(Shape shape, Entry self, List<Entry> neighbors) {}
 
   private record Key(LocalKey local, Orientation orientation) {}
 
+  private record CollisionKey(Key key, boolean selection) {}
+
   private static final Map<LocalKey, Mesh> LOCAL = boundedCache(2048);
   private static final Map<Key, Mesh> MESHES = boundedCache(2048);
-  private static final Map<Key, VoxelShape> COLLISIONS = boundedCache(1024);
+  private static final Map<CollisionKey, VoxelShape> COLLISIONS = boundedCache(2048);
 
   private ShapeGeometry() {}
 
@@ -45,37 +49,39 @@ public final class ShapeGeometry {
         data.offset() / 16.);
   }
 
-  private static Key key(ShapeData data, BlockState state, BlockGetter world, BlockPos pos) {
-    Orientation o = orientation(state, data);
-    List<Integer> neighbors = new ArrayList<>(6);
-    for (Direction local : Direction.values()) {
-      int id = -1;
-      if (world != null && (data.shape().roof() || data.shape().window())) {
-        double[] v = o.vector(local.getStepX(), local.getStepY(), local.getStepZ());
-        Direction global =
-            Direction.getApproximateNearest((float) v[0], (float) v[1], (float) v[2]);
-        if ((data.disconnected() & (1 << global.get3DDataValue())) == 0
-            && world.getBlockEntity(pos.relative(global)) instanceof ShapeBlockEntity other
-            && (other.data().disconnected() & (1 << global.getOpposite().get3DDataValue())) == 0) {
-          if (!data.shape().window()
-              || (other.data().shape().window()
-                  && other.getBlockState().getValue(ShapeBlock.FACING)
-                      == state.getValue(ShapeBlock.FACING)
-                  && other
-                      .getBlockState()
-                      .getValue(ShapeBlock.TURN)
-                      .equals(state.getValue(ShapeBlock.TURN)))) id = other.data().shapeId();
-        }
-      }
-      neighbors.add(id);
-    }
-    return new Key(
-        new LocalKey(data.shape(), List.copyOf(neighbors), data.secondary().isPresent()), o);
+  public static Entry entry(ShapeData data, BlockState state) {
+    return new Entry(
+        data.shapeId(),
+        state.getValue(ShapeBlock.FACING).get3DDataValue(),
+        state.getValue(ShapeBlock.TURN),
+        data.disconnected(),
+        data.secondary().isPresent());
   }
 
-  private static int neighbor(LocalKey key, int x, int y, int z) {
-    Direction d = Direction.getApproximateNearest(x, y, z);
-    return key.neighbors.get(d.get3DDataValue());
+  private static Key key(ShapeData data, BlockState state, BlockGetter world, BlockPos pos) {
+    List<Entry> neighbors = new ArrayList<>(27);
+    Shape shape = data.shape();
+    for (int x = -1; x <= 1; x++)
+      for (int y = -1; y <= 1; y++)
+        for (int z = -1; z <= 1; z++) {
+          Entry e = Entry.EMPTY;
+          if (world != null
+              && (shape.window() || shape.roof() && Math.abs(x) + Math.abs(y) + Math.abs(z) == 1)
+              && world.getBlockEntity(pos.offset(x, y, z)) instanceof ShapeBlockEntity be)
+            e = entry(be.data(), be.getBlockState());
+          neighbors.add(e);
+        }
+    return new Key(
+        new LocalKey(shape, entry(data, state), List.copyOf(neighbors)), orientation(state, data));
+  }
+
+  private static Neighborhood neighborhood(LocalKey key) {
+    return (x, y, z) ->
+        x == 0 && y == 0 && z == 0
+            ? key.self
+            : Math.abs(x) <= 1 && Math.abs(y) <= 1 && Math.abs(z) <= 1
+                ? key.neighbors.get((x + 1) * 9 + (y + 1) * 3 + z + 1)
+                : Entry.EMPTY;
   }
 
   private static Mesh mesh(Key key) {
@@ -88,17 +94,28 @@ public final class ShapeGeometry {
                     key.local,
                     () -> {
                       Shape shape = key.local.shape;
+                      Neighborhood world = neighborhood(key.local);
+                      if (shape.window()) return WindowMesh.create(key.local.self, world);
                       if (shape.roof())
                         return RoofMesh.create(
                             shape,
                             (x, y, z) -> {
-                              int id = neighbor(key.local, x, y, z);
-                              return id < 0 ? null : Shape.byId(id);
+                              double[] v = key.orientation.vector(x, y, z);
+                              Direction d =
+                                  Direction.getApproximateNearest(
+                                      (float) v[0], (float) v[1], (float) v[2]);
+                              Entry neighbor = world.at(d.getStepX(), d.getStepY(), d.getStepZ());
+                              return neighbor.shapeId() < 0
+                                      || (key.local.self.disconnected() & (1 << d.get3DDataValue()))
+                                          != 0
+                                      || (neighbor.disconnected()
+                                              & (1 << d.getOpposite().get3DDataValue()))
+                                          != 0
+                                  ? null
+                                  : neighbor.shape();
                             });
-                      if (shape.window())
-                        return WindowMesh.create(
-                            shape, (x, y, z) -> neighbor(key.local, x, y, z) >= 0, key.local.glass);
-                      return Mesh.model("shape/" + shape.model);
+                      Mesh model = Mesh.model("shape/" + shape.model);
+                      return new Mesh(model.triangles(), CollisionMask.boxes(shape));
                     })
                 .transformed(key.orientation));
   }
@@ -109,17 +126,30 @@ public final class ShapeGeometry {
 
   public static VoxelShape collision(
       ShapeData data, BlockState state, BlockGetter world, BlockPos pos) {
+    return collision(data, state, world, pos, true);
+  }
+
+  public static VoxelShape collision(
+      ShapeData data, BlockState state, BlockGetter world, BlockPos pos, boolean selection) {
     Key key = key(data, state, world, pos);
     return cached(
         COLLISIONS,
-        key,
+        new CollisionKey(key, selection),
         () -> {
-          VoxelShape result = Shapes.empty();
-          for (Mesh.Box b : mesh(key).boxes())
-            if (b.x1() > b.x0() && b.y1() > b.y0() && b.z1() > b.z0())
-              result =
-                  Shapes.or(result, Shapes.box(b.x0(), b.y0(), b.z0(), b.x1(), b.y1(), b.z1()));
-          return result.optimize();
+          List<Mesh.Box> boxes =
+              key.local.shape.window()
+                  ? WindowMesh.collision(key.local.self, neighborhood(key.local), selection)
+                  : CollisionMask.boxes(key.local.shape);
+          boxes = new Mesh(List.of(), boxes).transformed(key.orientation).boxes();
+          return voxel(boxes);
         });
+  }
+
+  public static VoxelShape voxel(List<Mesh.Box> boxes) {
+    VoxelShape result = Shapes.empty();
+    for (Mesh.Box b : boxes)
+      if (b.x1() > b.x0() && b.y1() > b.y0() && b.z1() > b.z0())
+        result = Shapes.or(result, Shapes.box(b.x0(), b.y0(), b.z0(), b.x1(), b.y1(), b.z1()));
+    return result.optimize();
   }
 }
