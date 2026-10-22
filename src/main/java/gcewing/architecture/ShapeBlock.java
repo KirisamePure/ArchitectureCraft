@@ -84,6 +84,12 @@ public final class ShapeBlock extends BaseEntityBlock {
   }
 
   @Override
+  protected float getShadeBrightness(BlockState state, BlockGetter world, BlockPos pos) {
+    BlockState base = data(world, pos).base();
+    return base.is(this) ? 1 : base.getShadeBrightness(world, pos);
+  }
+
+  @Override
   protected float getDestroyProgress(
       BlockState state, Player player, BlockGetter world, BlockPos pos) {
     BlockState base = data(world, pos).base();

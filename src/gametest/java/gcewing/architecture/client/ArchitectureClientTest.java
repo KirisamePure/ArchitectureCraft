@@ -133,6 +133,33 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
                 }
                 level.setBlockAndUpdate(
                     new BlockPos(0, 3, 8), ArchitectureCraft.SAWBENCH.defaultBlockState());
+                // Isolated seam cases: identical glass, a frame with holes, opaque material,
+                // and a native glass neighbor. No block-ID-specific culling rules.
+                for (int pair = 0; pair < 4; pair++) {
+                  BlockPos p = new BlockPos(24 + pair * 3, 3, 8);
+                  level.setBlockAndUpdate(p, ArchitectureCraft.SHAPE.defaultBlockState());
+                  ((ShapeBlockEntity) level.getBlockEntity(p))
+                      .setData(
+                          new ShapeData(
+                              Shape.Slab.id,
+                              Blocks.GLASS.defaultBlockState(),
+                              Optional.empty(),
+                              0,
+                              0));
+                  if (pair == 3) {
+                    level.setBlockAndUpdate(p.east(), Blocks.GLASS.defaultBlockState());
+                  } else {
+                    level.setBlockAndUpdate(p.east(), ArchitectureCraft.SHAPE.defaultBlockState());
+                    ((ShapeBlockEntity) level.getBlockEntity(p.east()))
+                        .setData(
+                            new ShapeData(
+                                (pair == 1 ? Shape.WindowFrame : Shape.Slab).id,
+                                (pair == 2 ? Blocks.STONE : Blocks.GLASS).defaultBlockState(),
+                                Optional.empty(),
+                                0,
+                                0));
+                  }
+                }
               });
       context.waitFor(mc -> mc.player != null && mc.player.getY() > 5);
       context.runOnClient(
@@ -154,6 +181,60 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
                   "Tagged material should render full-bright without a glowbrush");
           });
       world.getClientWorld().waitForChunksRender();
+      context.runOnClient(
+          mc -> {
+            for (int pair = 0; pair < 4; pair++) {
+              BlockPos p = new BlockPos(24 + pair * 3, 3, 8);
+              var be = (ShapeBlockEntity) mc.level.getBlockEntity(p);
+              var mesh = ShapeGeometry.mesh(be.data(), be.getBlockState(), mc.level, p);
+              var culling = new ShapeFaceCulling(mc.level, p);
+              long hidden =
+                  mesh.triangles().stream()
+                      .filter(
+                          t ->
+                              culling.hidden(
+                                  t,
+                                  Direction.getApproximateNearest(
+                                      (float) t.a().nx(), (float) t.a().ny(), (float) t.a().nz()),
+                                  be.data().base()))
+                      .count();
+              if ((pair == 0 || pair == 3) ? hidden == 0 : hidden != 0)
+                throw new AssertionError(
+                    "Incorrect shared transparent face removal for case " + pair + ": " + hidden);
+            }
+            var emitter = Renderer.get().mutableMesh().emitter();
+            List<Boolean> ambient = new ArrayList<>();
+            emitter.pushTransform(
+                q -> {
+                  ambient.add(q.ambientOcclusion() == net.fabricmc.fabric.api.util.TriState.FALSE);
+                  return true;
+                });
+            List<BakedQuad> quads = new ArrayList<>();
+            var data =
+                new ShapeData(
+                    Shape.Slab.id,
+                    MaterialTestBlocks.TRANSPARENT_CUBE.defaultBlockState(),
+                    Optional.empty(),
+                    0,
+                    0);
+            MeshRendering.emit(
+                ShapeGeometry.mesh(data, ArchitectureCraft.SHAPE.defaultBlockState(), null, null),
+                data,
+                false,
+                false,
+                null,
+                null,
+                emitter,
+                quads);
+            emitter.popTransform();
+            if (quads.isEmpty()
+                || quads.stream().anyMatch(BakedQuad::shade)
+                || ambient.isEmpty()
+                || ambient.stream().anyMatch(v -> !v))
+              throw new AssertionError(
+                  "Cut surfaces must retain the source model's disabled shading and ambient"
+                      + " occlusion");
+          });
       context.takeScreenshot("architecturecraft-shapes");
       world
           .getServer()

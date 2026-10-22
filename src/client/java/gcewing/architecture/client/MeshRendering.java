@@ -20,18 +20,24 @@ final class MeshRendering {
     return Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
   }
 
-  private record Surface(TextureAtlasSprite sprite, int tint) {}
+  private record Surface(TextureAtlasSprite sprite, int tint, boolean shade, boolean ao) {}
 
   private static Surface surface(BlockState material, Direction face) {
     BlockStateModel model = materialModel(material);
     for (BlockModelPart part : model.collectParts(RandomSource.create(42))) {
       List<BakedQuad> quads = part.getQuads(face);
       if (!quads.isEmpty())
-        return new Surface(quads.getFirst().sprite(), quads.getFirst().tintIndex());
+        return new Surface(
+            quads.getFirst().sprite(),
+            quads.getFirst().tintIndex(),
+            quads.getFirst().shade(),
+            part.useAmbientOcclusion());
       for (BakedQuad quad : part.getQuads(null))
-        if (quad.direction() == face) return new Surface(quad.sprite(), quad.tintIndex());
+        if (quad.direction() == face)
+          return new Surface(
+              quad.sprite(), quad.tintIndex(), quad.shade(), part.useAmbientOcclusion());
     }
-    return new Surface(model.particleIcon(), -1);
+    return new Surface(model.particleIcon(), -1, true, true);
   }
 
   static void emit(
@@ -45,13 +51,17 @@ final class MeshRendering {
       List<BakedQuad> baked) {
     Map<String, TextureAtlasSprite> sprites = new HashMap<>();
     Map<String, Surface> surfaces = new HashMap<>();
+    ShapeFaceCulling culling =
+        !sawbench && world != null && pos != null ? new ShapeFaceCulling(world, pos) : null;
     for (Mesh.Triangle triangle : mesh.triangles()) {
       Mesh.Vertex a = triangle.a();
       Direction face =
           Direction.getApproximateNearest((float) a.nx(), (float) a.ny(), (float) a.nz());
       BlockState material =
           triangle.material() >= 2 ? data.secondary().orElse(data.base()) : data.base();
+      if (culling != null && culling.hidden(triangle, face, material)) continue;
       TextureAtlasSprite sprite;
+      boolean shade = true, ao = true;
       int color = -1;
       if (sawbench) {
         String texture = "block/sawbench_" + (triangle.material() == 0 ? "wood" : "metal");
@@ -67,6 +77,8 @@ final class MeshRendering {
         String key = material.toString() + face;
         Surface surface = surfaces.computeIfAbsent(key, k -> surface(material, face));
         sprite = surface.sprite();
+        shade = surface.shade();
+        ao = surface.ao();
         if (surface.tint() >= 0) {
           int tint =
               Minecraft.getInstance()
@@ -80,8 +92,8 @@ final class MeshRendering {
           .cullFace(null)
           .tintIndex(-1)
           .emissive(glow || material.is(ArchitectureCraft.EMISSIVE_MATERIALS))
-          .diffuseShade(!glow)
-          .ambientOcclusion(net.fabricmc.fabric.api.util.TriState.of(!glow));
+          .diffuseShade(!glow && shade)
+          .ambientOcclusion(net.fabricmc.fabric.api.util.TriState.of(!glow && ao));
       emitter.renderLayer(sawbench ? null : ItemBlockRenderTypes.getChunkRenderType(material));
       Mesh.Vertex[] vertices = {triangle.a(), triangle.b(), triangle.c(), triangle.c()};
       for (int i = 0; i < 4; i++) {
