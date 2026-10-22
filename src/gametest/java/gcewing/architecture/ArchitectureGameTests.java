@@ -714,6 +714,50 @@ public final class ArchitectureGameTests {
   }
 
   @GameTest
+  public void transparentFullCubesWorkWithoutGlassInheritanceOrTags(GameTestHelper h) {
+    var block = MaterialTestBlocks.TRANSPARENT_CUBE;
+    var state = block.defaultBlockState();
+    check(
+        h,
+        !state.canOcclude() && !state.is(ArchitectureCraft.SAWBENCH_MATERIALS),
+        "Regression material is transparent and is not whitelisted");
+    var be = bench(h);
+    for (var material :
+        List.of(
+            block,
+            Blocks.GLASS,
+            Blocks.WHITE_STAINED_GLASS,
+            Blocks.TINTED_GLASS,
+            Blocks.ICE,
+            Blocks.STONE,
+            Blocks.OAK_SLAB)) {
+      be.setItem(0, new ItemStack(material, 8));
+      check(h, !be.getItem(1).isEmpty(), "Expected generic material acceptance: " + material);
+      var result = be.removeItem(1, be.getItem(1).getCount());
+      check(h, stackData(result).base().is(material), "Crafted shape retains its source material");
+      check(
+          h,
+          be.getItem(0).getCount() == (material == Blocks.OAK_SLAB ? 6 : 7),
+          "Extraction charges the correct cost");
+    }
+    for (var material :
+        List.of(
+            Blocks.CHEST,
+            Blocks.FURNACE,
+            Blocks.GLASS_PANE,
+            Blocks.OAK_FENCE,
+            Blocks.DANDELION,
+            ArchitectureCraft.SHAPE,
+            ArchitectureCraft.SAWBENCH)) {
+      check(
+          h,
+          !ArchitectureCraft.validMaterial(new ItemStack(material)),
+          "Excluded non-material: " + material);
+    }
+    h.succeed();
+  }
+
+  @GameTest
   public void nativeMaterialOverridesAndStatefulMaterialsWork(GameTestHelper h) {
     check(
         h,

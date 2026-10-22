@@ -140,15 +140,12 @@ public final class ArchitectureCraft implements ModInitializer {
     if (!(stack.getItem() instanceof BlockItem bi)
         || bi.getBlock() == SHAPE
         || bi.getBlock() == SAWBENCH) return false;
-    var state = bi.getBlock().defaultBlockState();
+    var state = SawbenchMenu.materialState(stack);
     if (state.is(SAWBENCH_MATERIALS)) return true;
     return !state.hasBlockEntity()
         && (bi.getBlock() instanceof SlabBlock
-            || bi.getBlock() == Blocks.GLASS
-            || bi.getBlock() instanceof StainedGlassBlock
             || state.isCollisionShapeFullBlock(
-                    net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
-                    net.minecraft.core.BlockPos.ZERO)
-                && state.canOcclude());
+                net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
+                net.minecraft.core.BlockPos.ZERO));
   }
 }

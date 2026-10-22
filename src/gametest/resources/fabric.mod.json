@@ -10,6 +10,9 @@
     ],
     "fabric-client-gametest": [
       "gcewing.architecture.client.ArchitectureClientTest"
+    ],
+    "main": [
+      "gcewing.architecture.MaterialTestBlocks"
     ]
   },
   "depends": {

@@ -16,7 +16,7 @@ Cladding Sheet is in the Other category and produces one sheet per block. Apply 
 
 Placement uses the clicked face and hit position, neighboring profiles and stair alignment. A translucent preview shows the planned placement. Roof ridges and valleys adapt to neighbors. Plain and corner windows join compatible frames, including diagonal end caps and glazing boundaries. Original model collision boxes and support masks determine movement, selection and attachment. Source materials supply textures, tint, transparency and mining behavior.
 
-Data packs can extend material acceptance with the block tag `architecturecraft:sawbench_materials` and mark materials emissive with `architecturecraft:emissive_materials`. Both tags are empty by default. Ordinary full building blocks, slabs and glass are accepted without a tag; blocks with block entities are excluded unless explicitly allowed.
+Data packs can extend material acceptance with the block tag `architecturecraft:sawbench_materials` and mark materials emissive with `architecturecraft:emissive_materials`. Both tags are empty by default. Full collision cubes (including transparent mod blocks) and slabs are accepted without a tag or a particular glass superclass; blocks with block entities are excluded unless explicitly allowed.
 
 This branch replaces the Forge 1.7.10 implementation. It does not migrate 1.7.10 worlds or numeric metadata IDs to modern Minecraft saves. Use a new 1.21.10 world. See [PORTING.md](PORTING.md) for the reference and validation scope.
 
