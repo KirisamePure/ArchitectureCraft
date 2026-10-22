@@ -758,16 +758,16 @@ public final class ArchitectureGameTests {
   }
 
   @GameTest
-  public void glassShapesRetainSourceLightingBrightness(GameTestHelper h) {
+  public void shapesDoNotOccludeLightingAsSolidMaterialCubes(GameTestHelper h) {
     var be = shape(h, POS, Shape.Slab);
     for (var material : List.of(Blocks.GLASS, Blocks.WHITE_STAINED_GLASS, Blocks.STONE)) {
       be.setData(
           new ShapeData(Shape.Slab.id, material.defaultBlockState(), Optional.empty(), 0, 0));
       check(
           h,
-          be.getBlockState().getShadeBrightness(h.getLevel(), be.getBlockPos())
-              == material.defaultBlockState().getShadeBrightness(h.getLevel(), be.getBlockPos()),
-          "Cut shapes preserve source brightness: " + material);
+          be.getBlockState().getShadeBrightness(h.getLevel(), be.getBlockPos()) == 1
+              && be.getBlockState().getLightEmission() == 0,
+          "Shapes do not invent solid-cube AO or emit light: " + material);
     }
     h.succeed();
   }

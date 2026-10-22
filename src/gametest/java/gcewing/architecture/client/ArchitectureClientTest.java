@@ -84,6 +84,56 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
           if (max - min < (sprite.getU1() - sprite.getU0()) * .9)
             throw new AssertionError("Model UVs must cover the material texture");
         });
+    context.runOnClient(
+        mc -> {
+          // Mixed axis-aligned and diagonal faces must keep daylight lighting, with no
+          // cube-corner AO on the oblique faces. Exercise the actual emitted FRAPI flags.
+          mc.options.ambientOcclusion().set(true);
+          int[] counts = new int[2];
+          for (Shape shape :
+              List.of(
+                  Shape.RoofTile,
+                  Shape.SlopeTileA1,
+                  Shape.SlopeTileB1,
+                  Shape.SlopeTileC1,
+                  Shape.SphereFull)) {
+            var data =
+                new ShapeData(
+                    shape.id, Blocks.STONE_BRICKS.defaultBlockState(), Optional.empty(), 0, 0);
+            var emitter = Renderer.get().mutableMesh().emitter();
+            emitter.pushTransform(
+                q -> {
+                  var n = q.faceNormal();
+                  boolean diagonal =
+                      Math.max(Math.abs(n.x()), Math.max(Math.abs(n.y()), Math.abs(n.z())))
+                          < .9999f;
+                  if (diagonal) {
+                    counts[0]++;
+                    if (q.ambientOcclusion() != net.fabricmc.fabric.api.util.TriState.FALSE)
+                      throw new AssertionError(
+                          "Oblique surfaces must not use cube-corner AO: " + shape);
+                  } else if (q.ambientOcclusion() == net.fabricmc.fabric.api.util.TriState.TRUE)
+                    counts[1]++;
+                  if (q.emissive() || !q.diffuseShade())
+                    throw new AssertionError(
+                        "Slope lighting must retain world light and directional shading");
+                  return true;
+                });
+            MeshRendering.emit(
+                ShapeGeometry.mesh(data, ArchitectureCraft.SHAPE.defaultBlockState(), null, null),
+                data,
+                false,
+                false,
+                null,
+                null,
+                emitter,
+                null);
+            emitter.popTransform();
+          }
+          if (counts[0] == 0 || counts[1] == 0)
+            throw new AssertionError(
+                "Regression must exercise both oblique and axis-aligned lighting");
+        });
     AtomicReference<PlacementPreview.Snapshot> preview = new AtomicReference<>();
     WorldRenderEvents.END_EXTRACTION.register(
         frame -> {
@@ -360,6 +410,45 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
               throw new AssertionError(
                   "Window outline must highlight the selected frame, not the whole window");
           });
+      world
+          .getServer()
+          .runOnServer(
+              server -> {
+                var level = server.overworld();
+                level.setDayTime(6000);
+                for (int x = 8; x < 14; x++) {
+                  for (int y = 3; y < 7; y++) {
+                    var p = new BlockPos(x, y, 24);
+                    level.setBlockAndUpdate(
+                        p,
+                        ArchitectureCraft.SHAPE
+                            .defaultBlockState()
+                            .setValue(ShapeBlock.FACING, Direction.SOUTH));
+                    ((ShapeBlockEntity) level.getBlockEntity(p))
+                        .setData(
+                            new ShapeData(
+                                Shape.SlopeTileA1.id,
+                                Blocks.STONE_BRICKS.defaultBlockState(),
+                                Optional.empty(),
+                                0,
+                                0));
+                  }
+                  for (int z = 22; z < 29; z++)
+                    level.setBlockAndUpdate(
+                        new BlockPos(x, 2, z), Blocks.STONE_BRICKS.defaultBlockState());
+                }
+                var player = server.getPlayerList().getPlayers().getFirst();
+                player.getInventory().setItem(0, ItemStack.EMPTY);
+                player.connection.teleport(11, 5, 31, 180, 8);
+              });
+      context.waitFor(mc -> mc.player.getZ() > 30 && mc.level.getDayTime() >= 6000);
+      world.getClientWorld().waitForChunksRender();
+      context.waitTicks(40); // Allow the lightmap to settle after teleport/time changes.
+      context.takeScreenshot("architecturecraft-slope-smooth-lighting-day");
+      world.getServer().runOnServer(server -> server.overworld().setDayTime(18000));
+      context.waitFor(mc -> mc.level.getDayTime() >= 18000);
+      context.waitTicks(40);
+      context.takeScreenshot("architecturecraft-slope-smooth-lighting-night");
     }
   }
 }

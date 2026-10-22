@@ -85,8 +85,9 @@ public final class ShapeBlock extends BaseEntityBlock {
 
   @Override
   protected float getShadeBrightness(BlockState state, BlockGetter world, BlockPos pos) {
-    BlockState base = data(world, pos).base();
-    return base.is(this) ? 1 : base.getShadeBrightness(world, pos);
+    // Reference BlockShape also returns 1: an architectural shape is not a solid
+    // material cube for AO sampling. This does not change block/sky light or emission.
+    return 1;
   }
 
   @Override

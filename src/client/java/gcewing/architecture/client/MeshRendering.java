@@ -40,6 +40,30 @@ final class MeshRendering {
     return new Surface(model.particleIcon(), -1, true, true);
   }
 
+  /** Avoid cube-corner AO artifacts on oblique and smoothly curved triangle surfaces. */
+  static boolean supportsSmoothLighting(Mesh.Triangle triangle) {
+    var a = triangle.a();
+    double ux = triangle.b().x() - a.x(),
+        uy = triangle.b().y() - a.y(),
+        uz = triangle.b().z() - a.z();
+    double vx = triangle.c().x() - a.x(),
+        vy = triangle.c().y() - a.y(),
+        vz = triangle.c().z() - a.z();
+    double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    double length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (length < 1e-12) return false;
+    if (Math.max(Math.abs(nx), Math.max(Math.abs(ny), Math.abs(nz))) / length < .99999)
+      return false;
+    // A planar triangle can still belong to a surface with interpolated curved normals.
+    for (var v : List.of(triangle.a(), triangle.b(), triangle.c())) {
+      double normalLength = Math.sqrt(v.nx() * v.nx() + v.ny() * v.ny() + v.nz() * v.nz());
+      if (normalLength < 1e-12
+          || Math.max(Math.abs(v.nx()), Math.max(Math.abs(v.ny()), Math.abs(v.nz()))) / normalLength
+              < .99999) return false;
+    }
+    return true;
+  }
+
   static void emit(
       Mesh mesh,
       ShapeData data,
@@ -93,7 +117,9 @@ final class MeshRendering {
           .tintIndex(-1)
           .emissive(glow || material.is(ArchitectureCraft.EMISSIVE_MATERIALS))
           .diffuseShade(!glow && shade)
-          .ambientOcclusion(net.fabricmc.fabric.api.util.TriState.of(!glow && ao));
+          .ambientOcclusion(
+              net.fabricmc.fabric.api.util.TriState.of(
+                  !glow && ao && supportsSmoothLighting(triangle)));
       emitter.renderLayer(sawbench ? null : ItemBlockRenderTypes.getChunkRenderType(material));
       Mesh.Vertex[] vertices = {triangle.a(), triangle.b(), triangle.c(), triangle.c()};
       for (int i = 0; i < 4; i++) {
