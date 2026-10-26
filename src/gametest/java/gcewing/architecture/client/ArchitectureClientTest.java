@@ -146,6 +146,7 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
           .runOnServer(
               server -> {
                 var level = server.overworld();
+                NativeSeamRegression.setup(level);
                 var player = server.getPlayerList().getPlayers().getFirst();
                 player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
                 player.getAbilities().flying = true;
@@ -231,6 +232,7 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
                   "Tagged material should render full-bright without a glowbrush");
           });
       world.getClientWorld().waitForChunksRender();
+      context.runOnClient(NativeSeamRegression::verify);
       context.runOnClient(
           mc -> {
             for (int pair = 0; pair < 4; pair++) {

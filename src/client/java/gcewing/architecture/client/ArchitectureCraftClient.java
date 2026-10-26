@@ -20,6 +20,8 @@ public final class ArchitectureCraftClient implements ClientModInitializer {
                         || bake.state().is(ArchitectureCraft.SAWBENCH))
                       return new ArchitectureBlockModel(
                           model, bake.state().is(ArchitectureCraft.SAWBENCH));
+                    if (NativeShapeSeamModel.hidesOwnFaces(bake.state()))
+                      return new NativeShapeSeamModel(model);
                     return model;
                   });
           context

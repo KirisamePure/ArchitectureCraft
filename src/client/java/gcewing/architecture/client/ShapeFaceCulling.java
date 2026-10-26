@@ -80,7 +80,7 @@ final class ShapeFaceCulling {
     return face.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1 : 0;
   }
 
-  private static boolean boundary(Mesh.Triangle t, Direction face) {
+  static boolean boundary(Mesh.Triangle t, Direction face) {
     int axis = axis(face);
     for (var v : List.of(t.a(), t.b(), t.c())) {
       double[] p = {v.x(), v.y(), v.z()}, n = {v.nx(), v.ny(), v.nz()};
