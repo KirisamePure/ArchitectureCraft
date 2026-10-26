@@ -36,11 +36,16 @@ public final class PlacementPreview {
               .worldState()
               .setData(
                   PREVIEW,
-                  context.blockOutlines() && mc.hitResult instanceof BlockHitResult hit
+                  mc.screen == null
+                          && !mc.options.hideGui
+                          && mc.hitResult instanceof BlockHitResult hit
                       ? extract(mc, hit)
                       : null);
         });
-    WorldRenderEvents.BEFORE_TRANSLUCENT.register(
+    // Submit before entity rendering so the active renderer owns the target,
+    // shader selection and buffer flush. Do not append to shared buffers after
+    // their entity pass has already completed (notably under shader pipelines).
+    WorldRenderEvents.BEFORE_ENTITIES.register(
         context -> {
           Snapshot snapshot = context.worldState().getData(PREVIEW);
           if (snapshot == null) return;
@@ -51,25 +56,28 @@ public final class PlacementPreview {
               snapshot.pos.getX() - camera.x,
               snapshot.pos.getY() - camera.y,
               snapshot.pos.getZ() - camera.z);
-          var buffer =
-              context
-                  .consumers()
-                  .getBuffer(RenderType.entityTranslucent(TextureAtlas.LOCATION_BLOCKS));
-          int light = snapshot.light;
-          int[] lights = {light, light, light, light};
-          float[] brightness = {1, 1, 1, 1};
-          for (BakedQuad quad : snapshot.quads)
-            buffer.putBulkData(
-                matrices.last(),
-                quad,
-                brightness,
-                1,
-                1,
-                1,
-                .45f,
-                lights,
-                OverlayTexture.NO_OVERLAY,
-                true);
+          context
+              .commandQueue()
+              .submitCustomGeometry(
+                  matrices,
+                  RenderType.entityTranslucent(TextureAtlas.LOCATION_BLOCKS),
+                  (pose, buffer) -> {
+                    int light = snapshot.light;
+                    int[] lights = {light, light, light, light};
+                    float[] brightness = {1, 1, 1, 1};
+                    for (BakedQuad quad : snapshot.quads)
+                      buffer.putBulkData(
+                          pose,
+                          quad,
+                          brightness,
+                          1,
+                          1,
+                          1,
+                          .45f,
+                          lights,
+                          OverlayTexture.NO_OVERLAY,
+                          true);
+                  });
           matrices.popPose();
         });
     WorldRenderEvents.AFTER_BLOCK_OUTLINE_EXTRACTION.register(
@@ -87,7 +95,10 @@ public final class PlacementPreview {
   }
 
   static Snapshot extract(Minecraft mc, BlockHitResult hit) {
-    if (mc.player == null || mc.level == null || hit.getType() != HitResult.Type.BLOCK) return null;
+    if (mc.player == null
+        || mc.player.isSpectator()
+        || mc.level == null
+        || hit.getType() != HitResult.Type.BLOCK) return null;
     InteractionHand hand =
         mc.player.getMainHandItem().getItem() instanceof ShapeItem
             ? InteractionHand.MAIN_HAND

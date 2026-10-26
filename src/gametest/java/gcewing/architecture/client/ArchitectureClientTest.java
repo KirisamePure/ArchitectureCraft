@@ -40,6 +40,32 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
     context.getInput().pressMouse(button);
   }
 
+  private static void assertPreviewDrawn(java.nio.file.Path off, java.nio.file.Path on) {
+    try {
+      var before = javax.imageio.ImageIO.read(off.toFile());
+      var after = javax.imageio.ImageIO.read(on.toFile());
+      // This fixed camera targets the preview above the anchor. Exclude the
+      // hotbar, held item and recipe toasts, which also change when selecting items.
+      int left = (int) (before.getWidth() * .44), right = (int) (before.getWidth() * .56);
+      int top = (int) (before.getHeight() * .28), bottom = (int) (before.getHeight() * .51);
+      int changed = 0;
+      for (int y = top; y < bottom; y++)
+        for (int x = left; x < right; x++) {
+          int a = before.getRGB(x, y), b = after.getRGB(x, y);
+          for (int shift = 0; shift <= 16; shift += 8) {
+            if (Math.abs(((a >>> shift) & 255) - ((b >>> shift) & 255)) > 15) {
+              changed++;
+              break;
+            }
+          }
+        }
+      if (changed < (right - left) * (bottom - top) / 10)
+        throw new AssertionError("Preview snapshot exists but no visible preview was drawn");
+    } catch (java.io.IOException e) {
+      throw new java.io.UncheckedIOException(e);
+    }
+  }
+
   @Override
   public void runTest(ClientGameTestContext context) {
     context.runOnClient(
@@ -138,7 +164,7 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
     WorldRenderEvents.END_EXTRACTION.register(
         frame -> {
           var data = frame.worldState().getData(PlacementPreview.PREVIEW);
-          if (data != null) preview.set(data);
+          preview.set(data);
         });
     try (var world = context.worldBuilder().create()) {
       world
@@ -359,7 +385,47 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
       context.waitFor(mc -> preview.get() != null && preview.get().pos().equals(anchor.above()));
       var expected = preview.get();
       if (expected.quads().isEmpty()) throw new AssertionError("Placement preview is empty");
-      context.takeScreenshot("architecturecraft-placement-preview");
+      // Capture an identical camera view without the preview, so validation can
+      // compare the world pixels rather than just finding a nonempty snapshot.
+      world
+          .getServer()
+          .runOnServer(
+              server ->
+                  server
+                      .getPlayerList()
+                      .getPlayers()
+                      .getFirst()
+                      .getInventory()
+                      .setItem(0, ItemStack.EMPTY));
+      context.waitFor(mc -> mc.player.getMainHandItem().isEmpty() && preview.get() == null);
+      context.waitTicks(3);
+      var previewOff = context.takeScreenshot("architecturecraft-placement-preview-off");
+      world
+          .getServer()
+          .runOnServer(
+              server ->
+                  server
+                      .getPlayerList()
+                      .getPlayers()
+                      .getFirst()
+                      .getInventory()
+                      .setItem(
+                          0,
+                          new ShapeData(
+                                  Shape.RoofTile.id,
+                                  Blocks.BRICKS.defaultBlockState(),
+                                  Optional.empty(),
+                                  0,
+                                  0)
+                              .stack(1)));
+      context.waitFor(mc -> preview.get() != null && preview.get().pos().equals(anchor.above()));
+      context.waitTicks(3);
+      var previewOn = context.takeScreenshot("architecturecraft-placement-preview");
+      assertPreviewDrawn(previewOff, previewOn);
+      context.runOnClient(mc -> mc.options.hideGui = true);
+      context.waitFor(mc -> preview.get() == null);
+      context.runOnClient(mc -> mc.options.hideGui = false);
+      context.waitFor(mc -> preview.get() != null && preview.get().pos().equals(anchor.above()));
       context.runOnClient(
           mc ->
               mc.gameMode.useItemOn(
