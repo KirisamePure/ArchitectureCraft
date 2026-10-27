@@ -62,28 +62,31 @@ final class ArchitectureItemModel implements ItemModel {
                               data, ArchitectureCraft.SHAPE.defaultBlockState(), null, null);
               if (!sawbench && !kind.equals("cladding"))
                 mesh = mesh.transformed(Orientation.legacy(0, 3, 0));
-              List<BakedQuad> result = new ArrayList<>();
-              MeshRendering.emit(
-                  mesh,
-                  data,
-                  sawbench,
-                  glow,
-                  null,
-                  null,
-                  Renderer.get().mutableMesh().emitter(),
-                  result);
-              Map<net.minecraft.world.level.block.state.BlockState, List<BakedQuad>> grouped =
+              // A material boundary may be hidden. Group source triangles before
+              // baking; emitted quad indices no longer correspond to mesh indices.
+              Map<net.minecraft.world.level.block.state.BlockState, List<Mesh.Triangle>> grouped =
                   new LinkedHashMap<>();
-              for (int i = 0; i < result.size(); i++) {
+              for (var triangle : mesh.triangles()) {
                 var material =
-                    mesh.triangles().get(i).material() >= 2
-                        ? data.secondary().orElse(data.base())
-                        : data.base();
-                grouped.computeIfAbsent(material, ignored -> new ArrayList<>()).add(result.get(i));
+                    triangle.material() >= 2 ? data.secondary().orElse(data.base()) : data.base();
+                grouped.computeIfAbsent(material, ignored -> new ArrayList<>()).add(triangle);
               }
-              return grouped.entrySet().stream()
-                  .map(e -> new Surface(e.getKey(), List.copyOf(e.getValue())))
-                  .toList();
+              List<Surface> bakedSurfaces = new ArrayList<>();
+              for (var group : grouped.entrySet()) {
+                List<BakedQuad> quads = new ArrayList<>();
+                MeshRendering.emit(
+                    new Mesh(List.copyOf(group.getValue()), List.of()),
+                    data,
+                    sawbench,
+                    glow,
+                    null,
+                    null,
+                    Renderer.get().mutableMesh().emitter(),
+                    quads);
+                if (!quads.isEmpty())
+                  bakedSurfaces.add(new Surface(group.getKey(), List.copyOf(quads)));
+              }
+              return List.copyOf(bakedSurfaces);
             });
     state.appendModelIdentityElement(this);
     state.appendModelIdentityElement(data);

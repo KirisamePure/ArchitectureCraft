@@ -114,7 +114,10 @@ public final class ShapeGeometry {
                                   ? null
                                   : neighbor.shape();
                             });
-                      Mesh model = Mesh.model("shape/" + shape.model);
+                      Mesh model =
+                          shape == Shape.DoubleRoofTile
+                              ? DoubleRoofMesh.create()
+                              : Mesh.model("shape/" + shape.model);
                       return new Mesh(model.triangles(), CollisionMask.boxes(shape));
                     })
                 .transformed(key.orientation));

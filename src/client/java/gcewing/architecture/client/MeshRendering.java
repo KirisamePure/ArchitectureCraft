@@ -1,12 +1,15 @@
 package gcewing.architecture.client;
 
 import gcewing.architecture.*;
+import gcewing.architecture.shape.DoubleRoofMesh;
 import gcewing.architecture.shape.Mesh;
+import gcewing.architecture.shape.Shape;
 import java.util.*;
 import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.block.model.*;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.texture.*;
 import net.minecraft.core.*;
 import net.minecraft.util.RandomSource;
@@ -83,6 +86,14 @@ final class MeshRendering {
           Direction.getApproximateNearest((float) a.nx(), (float) a.ny(), (float) a.nz());
       BlockState material =
           triangle.material() >= 2 ? data.secondary().orElse(data.base()) : data.base();
+      if (data.shape() == Shape.DoubleRoofTile && DoubleRoofMesh.isInterface(triangle)) {
+        var other = triangle.material() >= 2 ? data.base() : data.secondary().orElse(data.base());
+        if (material.equals(other)
+            || material.skipRendering(other, face)
+            || other.canOcclude()
+                && ItemBlockRenderTypes.getChunkRenderType(other) == ChunkSectionLayer.SOLID)
+          continue;
+      }
       if (culling != null && culling.hidden(triangle, face, material)) continue;
       TextureAtlasSprite sprite;
       boolean shade = true, ao = true;

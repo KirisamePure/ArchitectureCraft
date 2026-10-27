@@ -160,6 +160,7 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
             throw new AssertionError(
                 "Regression must exercise both oblique and axis-aligned lighting");
         });
+    context.runOnClient(DoubleRoofRegression::verify);
     AtomicReference<PlacementPreview.Snapshot> preview = new AtomicReference<>();
     WorldRenderEvents.END_EXTRACTION.register(
         frame -> {
@@ -517,6 +518,41 @@ public final class ArchitectureClientTest implements FabricClientGameTest {
       context.waitFor(mc -> mc.level.getDayTime() >= 18000);
       context.waitTicks(40);
       context.takeScreenshot("architecturecraft-slope-smooth-lighting-night");
+      for (boolean glassBase : new boolean[] {true, false}) {
+        world
+            .getServer()
+            .runOnServer(
+                server -> {
+                  var level = server.overworld();
+                  level.setDayTime(6000);
+                  var p = new BlockPos(20, 4, 32);
+                  level.setBlockAndUpdate(p, ArchitectureCraft.SHAPE.defaultBlockState());
+                  ((ShapeBlockEntity) level.getBlockEntity(p))
+                      .setData(
+                          new ShapeData(
+                              Shape.DoubleRoofTile.id,
+                              (glassBase ? Blocks.GLASS : Blocks.STONE_BRICKS).defaultBlockState(),
+                              Optional.of(
+                                  (glassBase ? Blocks.STONE_BRICKS : Blocks.GLASS)
+                                      .defaultBlockState()),
+                              0,
+                              0));
+                  var player = server.getPlayerList().getPlayers().getFirst();
+                  player.getInventory().setItem(0, ItemStack.EMPTY);
+                  if (glassBase) player.connection.teleport(24, 4, 37, 142.125f, 11.1f);
+                  else player.connection.teleport(17, 6, 37, 217.875f, 28.7f);
+                });
+        context.waitFor(
+            mc ->
+                mc.player.getZ() > 36
+                    && (glassBase ? mc.player.getX() > 23 : mc.player.getX() < 18));
+        world.getClientWorld().waitForChunksRender();
+        context.waitTicks(20);
+        context.takeScreenshot(
+            glassBase
+                ? "architecturecraft-double-roof-glass-stone"
+                : "architecturecraft-double-roof-stone-glass");
+      }
     }
   }
 }

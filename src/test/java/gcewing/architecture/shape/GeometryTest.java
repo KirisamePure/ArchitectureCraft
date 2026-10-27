@@ -26,7 +26,9 @@ class GeometryTest {
             ? RoofMesh.create(shape, (x, y, z) -> null)
             : shape.window()
                 ? WindowMesh.create(shape, (x, y, z) -> false, true)
-                : Mesh.model("shape/" + shape.model);
+                : shape == Shape.DoubleRoofTile
+                    ? DoubleRoofMesh.create()
+                    : Mesh.model("shape/" + shape.model);
     assertFalse(mesh.triangles().isEmpty(), shape.name());
     assertFalse(mesh.boxes().isEmpty(), shape.name());
     for (Mesh.Triangle t : mesh.triangles())

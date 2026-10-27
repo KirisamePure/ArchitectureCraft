@@ -8,7 +8,9 @@ Fabric API is the only required mod dependency. There are no optional integratio
 
 Craft the circular saw blade and large pulley, then craft the architect's sawbench. Its original illustrated interface contains eight categories and remembers your selection in each category. Insert building material and take the result to cut it: the output slot previews the selected shape without consuming material until you take it. Partial batches are charged once and remain available when you change the selection or close the screen. Shift-click transfers items. Slabs cost twice as many items as full blocks; costs and yields follow the original catalog of 106 entries.
 
-Cladding Sheet is in the Other category and produces one sheet per block. Apply it to a compatible shape to add a secondary surface. Windows accept glass panes, including stained panes. Breaking a shape returns its base shape and secondary material separately; pick-block copies the base shape without duplicating its secondary material.
+Cladding Sheet is in the Other category and produces one sheet per block. Apply it to a compatible shape to add a secondary surface. Windows accept glass panes, including stained panes. Double Roof Tile combines two complementary roof halves in one block: apply a second material as cladding. Mixed opaque/transparent halves expose the opaque material on the internal diagonal; identical glass halves keep that interface hidden.
+
+Breaking a shape returns its base shape and secondary material separately; pick-block copies the base shape without duplicating its secondary material.
 
 - **Hammer:** rotate a shape; sneak to cycle its mounting face. Offset shapes alternate their offset before turning.
 - **Chisel:** click an edge zone to disconnect/reconnect neighboring shapes, or click the center to remove cladding/glazing. It also harvests glass, glass panes, glowstone and ice.
